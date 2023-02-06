@@ -1,9 +1,10 @@
+using Mirror;
 using System;
 using System.Collections;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
-public class RoomBehaviour : MonoBehaviour
+public class RoomBehaviour : NetworkBehaviour
 {
     public GameObject[] walls; // 0 - Up 1 -Down 2 - Right 3- Left
     public GameObject[] doors;
@@ -20,9 +21,10 @@ public class RoomBehaviour : MonoBehaviour
                 for (int j = 0; j < dungeonProps[i].amount; j++)
                 {
                     GameObject gameObject = Instantiate(dungeonProps[i].prop, transform.position + new Vector3(Random.Range(-spawnRange, spawnRange), 0, Random.Range(-spawnRange, spawnRange)), Quaternion.identity);
+                    gameObject.transform.SetParent(transform);
                     var scale = Random.Range(dungeonProps[i].scale.x, dungeonProps[i].scale.y);
                     gameObject.transform.localScale = new Vector3(scale, scale, scale);
-                    gameObject.transform.SetParent(transform);
+                    NetworkServer.Spawn(gameObject);
                 }
             }
         } 

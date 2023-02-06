@@ -1,13 +1,15 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using Mirror;
 
 public class EndlessTerrain : MonoBehaviour
 {
 	public LODInfo[] detailLevels;
 	public static float maxViewDst;
 
-	private Transform viewer;
+	public Transform viewer;
+	public static Player playerInstance;
 	public static Vector2 viewerPosition;
 	Vector2 viewerPositionOld;
 	static MapGenerator mapGenerator;
@@ -22,27 +24,31 @@ public class EndlessTerrain : MonoBehaviour
 	void Start()
 	{
         mapGenerator = FindObjectOfType<MapGenerator>();
-		viewer = GameObject.FindGameObjectWithTag("Player").transform;
-        //mapGenerator.seed = FindObjectOfType<StoreVariables>().seedInt;
+		viewer = Player.playerInstance.transform;
+
+        if (FindObjectOfType<StoreVariables>() != null)
+        {
+            mapGenerator.seed = FindObjectOfType<StoreVariables>().seedInt;
+            mapGenerator.biome = (MapGenerator.Biome)(int)FindObjectOfType<StoreVariables>().biomeInt;
+        }
 
         maxViewDst = detailLevels[detailLevels.Length - 1].visibleDstThreshold;
-		chunkSize = MapGenerator.mapChunkSize - 1;
-		chunksVisibleInViewDst = Mathf.RoundToInt(maxViewDst / chunkSize);
+        chunkSize = MapGenerator.mapChunkSize - 1;
+        chunksVisibleInViewDst = Mathf.RoundToInt(maxViewDst / chunkSize);
 
-		UpdateVisibleChunks();
-	}
+        UpdateVisibleChunks();
+    }
 
 	void Update()
 	{
-		viewerPosition = new Vector2(viewer.position.x, viewer.position.z) / mapGenerator.scale;
+        viewerPosition = new Vector2(viewer.position.x, viewer.position.z) / mapGenerator.scale;
 
-		if ((viewerPositionOld - viewerPosition).sqrMagnitude > sqrViewerMoveThresholdForChunkUpdate)
-		{
-			viewerPositionOld = viewerPosition;
-			UpdateVisibleChunks();
-		}
-
-	}
+        if ((viewerPositionOld - viewerPosition).sqrMagnitude > sqrViewerMoveThresholdForChunkUpdate)
+        {
+            viewerPositionOld = viewerPosition;
+            UpdateVisibleChunks();
+        }
+    }
 
 	void UpdateVisibleChunks()
 	{
@@ -95,7 +101,7 @@ public class EndlessTerrain : MonoBehaviour
 		bool mapDataReceived;
 		int previousLODIndex = -1;
 
-		public TerrainChunk(Vector2 coord, int scale, int size, LODInfo[] detailLevels, Transform parent, Material material, Material material2, GameObject waterObject)
+        public TerrainChunk(Vector2 coord, int scale, int size, LODInfo[] detailLevels, Transform parent, Material material, Material material2, GameObject waterObject)
 		{
 			this.detailLevels = detailLevels;
 			position = coord * size;
@@ -145,7 +151,7 @@ public class EndlessTerrain : MonoBehaviour
 			this.mapData = mapData;
 			mapDataReceived = true;
 
-			UpdateTerrainChunk();
+            UpdateTerrainChunk();
 		}
 
 		public void UpdateTerrainChunk()
@@ -190,7 +196,6 @@ public class EndlessTerrain : MonoBehaviour
 						if (collisionLODMesh.hasMesh)
 						{
 							meshCollider.sharedMesh = collisionLODMesh.mesh;
-							//mapGenerator.biome = (MapGenerator.Biome)Random.Range(0, 7);
 							if (vegetation.GetComponent<GenerateVegetation>() == null)
 								vegetation.AddComponent<GenerateVegetation>();
 						}
@@ -209,9 +214,18 @@ public class EndlessTerrain : MonoBehaviour
 
 		public void SetVisible(bool visible)
 		{
-			meshObject.SetActive(visible);
-			water.SetActive(visible);
-			vegetation.SetActive(visible);
+			if (meshObject != null)
+			{
+                meshObject.SetActive(visible);
+            }
+			if (water != null)
+			{
+                water.SetActive(visible);
+            }
+			if (vegetation != null)
+			{
+                vegetation.SetActive(visible);
+            }
 		}
 	}
 

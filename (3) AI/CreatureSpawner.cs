@@ -1,24 +1,27 @@
+using Mirror;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class CreatureSpawner : MonoBehaviour
+public class CreatureSpawner : NetworkBehaviour
 {
+    [Header("Creature Spawner Settings")]
     public GameObject spawner;
-    public int creatureSpawnSize = 300;
-    public float spawnTime = 10;
-    public int spawnLimit = 50;
-    public int spawnRange = 100;
-    public Creatures[] creatures;
+    [Range(100, 1000)] public int creatureSpawnSize;
+    [Range(1, 20)] public float spawnTime;
+    [Range(1, 10)] public int spawnLimit;
+    [Range(100, 1000)] public int spawnRange;
     public bool canSpawn = false;
+    public Creatures[] creatures;
 
+    //Private Variables
     private Transform player;
     private float distanceToTarget = Mathf.Infinity;
     private int creatureCount = 0;
 
     private void Start()
     {
-        player = GameObject.FindGameObjectWithTag("Player").transform;
+        player = Player.playerInstance.transform;
         InvokeRepeating("SpawnRandom", 0, spawnTime);
     }
 
@@ -43,13 +46,14 @@ public class CreatureSpawner : MonoBehaviour
             RaycastHit hit;
             for (int i = 0; i < creatures.Length; i++)
             {
-                if (Physics.Raycast(new Vector3(Random.Range(-creatureSpawnSize, creatureSpawnSize), 350, Random.Range(-creatureSpawnSize, creatureSpawnSize)) + gameObject.transform.position, Vector3.down, out hit, 350.0f) && hit.point.y > creatures[i].spawnHeight.x && hit.point.y < creatures[i].spawnHeight.y && hit.collider.tag == "Untagged")
+                if (Physics.Raycast(new Vector3(Random.Range(-creatureSpawnSize, creatureSpawnSize), 1500, Random.Range(-creatureSpawnSize, creatureSpawnSize)) + gameObject.transform.position, Vector3.down, out hit, 1500) && hit.point.y > creatures[i].spawnHeight.x && hit.point.y < creatures[i].spawnHeight.y && hit.collider.tag == "Untagged")
                 {
                     GameObject creature = Instantiate(creatures[Random.Range(0, creatures.Length)].creature, hit.point, Quaternion.identity);
                     float randomScale = Random.Range(creatures[i].scale.x, creatures[i].scale.y);
                     creature.transform.localScale = new Vector3(randomScale, randomScale, randomScale);
-                    creature.transform.SetParent(spawner.transform);
+                    creature.transform.SetParent(spawner.transform.parent);
                     creatureCount += 1;
+                    NetworkServer.Spawn(creature);
                     break;
                 }
             }

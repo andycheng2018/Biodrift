@@ -11,7 +11,6 @@ public class SettingsMenu : MonoBehaviour
     public AudioMixer audioMixer;
     public TMP_Dropdown resolutionDropdown;
     public Canvas settingsCanvas;
-    public Canvas endgameCanvas;
     public static bool isPause;
 
     Resolution[] resolutions;
@@ -89,22 +88,6 @@ public class SettingsMenu : MonoBehaviour
     public void Menu()
     {
         SceneManager.LoadScene("Menu");
-    }
-
-    public void endGamePause()
-    {
-        Cursor.lockState = CursorLockMode.None;
-        endgameCanvas.enabled = true;
-        Time.timeScale = 0;
-        isPause = true;
-    }
-
-    public void endGameResume()
-    {
-        Cursor.lockState = CursorLockMode.Locked;
-        endgameCanvas.enabled = false;
-        Time.timeScale = 1;
-        isPause = false;
     }
 
     public void QuitGame()

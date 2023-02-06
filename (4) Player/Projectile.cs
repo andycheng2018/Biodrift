@@ -1,12 +1,15 @@
+using Mirror;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using static UnityEngine.ParticleSystem;
 
-public class Projectile : MonoBehaviour
+public class Projectile : NetworkBehaviour
 {
     private WeaponController weaponController;
     private Rigidbody rb;
     private bool launched = true;
+    private Player player;
 
     private void Awake()
     {
@@ -16,6 +19,8 @@ public class Projectile : MonoBehaviour
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
         rb.freezeRotation = true;
         weaponController.type = WeaponController.Types.Projectile;
+        weaponController.weaponDamage *= 1.5f;
+        player = Player.playerInstance;
     }
 
     private void LateUpdate()
@@ -41,9 +46,9 @@ public class Projectile : MonoBehaviour
                 return;
             }
 
-            if (other.tag == "Enemy")
+            if (other.tag == "Enemy" || other.tag == "Villager")
             {
-                Destroy(gameObject);
+                StartCoroutine(player.CmdDestroyObject(gameObject, 0));
             }
         }
 
@@ -61,14 +66,19 @@ public class Projectile : MonoBehaviour
 
             if (other.tag == "Player")
             {
-                Destroy(gameObject);
+                GameObject particle = Instantiate(weaponController.hitEffect, transform.position, transform.rotation);
+                NetworkServer.Spawn(particle);
+                StartCoroutine(player.CmdDestroyObject(particle, 2));
+                weaponController.audioSource.PlayOneShot(weaponController.damageSound);
+                other.gameObject.SendMessageUpwards("ChangeHealth", -weaponController.weaponDamage, SendMessageOptions.DontRequireReceiver);
+                StartCoroutine(player.CmdDestroyObject(gameObject, 0));
             }
         }
 
         weaponController.enabled = false;
         rb.isKinematic = true;
         transform.SetParent(other.transform);
-        Destroy(gameObject, 3);
+        StartCoroutine(player.CmdDestroyObject(gameObject, 3));
         launched = false;
     }
 }

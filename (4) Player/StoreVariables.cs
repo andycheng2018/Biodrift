@@ -24,6 +24,6 @@ public class StoreVariables : MonoBehaviour
 
     public void StartGame()
     {
-        SceneManager.LoadScene("Game");
+        SceneManager.LoadScene("Singleplayer");
     }
 }

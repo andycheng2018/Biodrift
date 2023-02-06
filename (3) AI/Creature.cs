@@ -2,56 +2,52 @@ using UnityEngine;
 using System.Collections;
 using UnityEngine.UI;
 using TMPro;
+using Mirror;
+using static UnityEngine.ParticleSystem;
 
-public class Creature : MonoBehaviour
+public class Creature : NetworkBehaviour
 {
-    [Header("Movement")]
+    [Header("Creature References")]
     public Animator anim;
-    public float speed = 8f;
-    public float chaseRange = 8f;
-    public float rotationSpeed = 3.0f;
-    public float jumpHeight = 10f;
-    private float jumpSec;
-    private float rollSec;
-
-    [Header("Idle")]
-    public int idleSec = 5;
-    public int walkSec = 10;
-    public int rotSec = 3;
-
-    [Header("Health")]
-    public GameObject healthBar;
+    [SerializeField] private NetworkAnimator networkAnimator = null;
     public Slider slider;
-    public float health = 1000;
-    public float maxHealth = 1000;
-    public int runAwayHealth = 500;
-
-    [Header("Weapon")]
-    public Class classes;
-    public enum Class { Warrior, Archer, Mage, Ghost };
-    public bool isBoss;
     public TMP_Text bossText;
+    public bool isBoss;
+
+    [Header("Creature Settings")]
+    [Range(1, 50)] public float speed;
+    [Range(1, 10)] public float rotationSpeed;
+    [Range(0, 500)] public float chaseRange;
+    [Range(1, 20)] public float jumpHeight;
+    [SyncVar]
+    [Range(1000, 10000)] public float health;
+    [Range(1000, 10000)] public float maxHealth;
+    [Range(0, 10000)] public int runAwayHealth;
+    [Range(0, 1000)] public int xp; 
+
+    [Header("Creature Weapon")]
+    public Class classes;
+    public enum Class { Warrior, Archer, Mage, Ghost, Villager, Guard };
     public Transform hand;
     public Transform offhand;
-    public int attackRange;
-    public float attackCoolDown = 0.5f;
+    public GameObject dustParticle;
+    [Range(1, 100)] public int attackRange;
+    [Range(1f, 5f)] public float attackCoolDown;
     public bool canAttack = true;
+    public bool isProvoked;
     public GameObject[] weapons;
     public GameObject[] shields;
-    private WeaponController curWeapon;
-    private WeaponController curShield;
-    private int attackNum;
 
-    [Header("Ability")]
+    [Header("Creature Abilities")]
     public bool smashGround;
     public GameObject smashParticles;
     public AudioClip smashSound;
-    public int particleTime = 2;
+    public int particleTime;
 
     public bool shootLazar;
     public GameObject lazar;
-    public int lazarTime;
     public AudioClip lazarSound;
+    public int lazarTime;
 
     public bool summonTroops;
     public GameObject troop;
@@ -60,50 +56,65 @@ public class Creature : MonoBehaviour
 
     public bool teleport;
     public GameObject teleportParticle;
-    public float teleportChance;
     public AudioClip teleportSound;
+    public float teleportChance;
 
     [Header("Audio Settings")]
-    public AudioSource audioSource;
-    public AudioClip footstep;
-    public AudioClip breath;
-    public AudioClip hurt;
-    public AudioClip death;
+    public AudioClip[] idle;
+    public AudioClip[] damaged;
+    public AudioClip[] death;
 
+    //Private Variables
+    //Booleans
+    private bool isWandering;
+    private bool isRotatingLeft;
+    private bool isRotatingRight;
+    private bool isIdle;
+    private bool isWalking;
+    private bool isDead;
+    //References
     private Transform player;
+    private AudioSource audioSource;
     private float distanceToTarget = Mathf.Infinity;
-    private bool isWandering = false;
-    private bool isRotatingLeft = false;
-    private bool isRotatingRight = false;
-    private bool isIdle = false;
-    private bool isWalking = false;
-    private bool dead = false;
-    private float period = 0.0f;
-    private float period2 = 0.0f;
+    private float jumpSec;
+    private float rollSec;
+    private float idleAudioSec;
+    //Weapons
+    private int attackNum;
+    private WeaponController curWeapon;
+    private WeaponController curShield;
 
     private void Start()
     {
-        player = GameObject.FindGameObjectWithTag("Player").transform;
+        player = Player.playerInstance.transform;
+        audioSource = GetComponent<AudioSource>();
         health = maxHealth;
         slider.value = health / maxHealth;
         attackNum = Random.Range(0, 3);
         jumpSec = Random.Range(10, 25);
-        rollSec = Random.Range(10, 35);
+        rollSec = Random.Range(10, 30);
+        idleAudioSec = Random.Range(1, 5);
+        InvokeRepeating("jump", jumpSec, jumpSec);
+        InvokeRepeating("roll", rollSec, rollSec);
+        InvokeRepeating("idleAudio", idleAudioSec, idleAudioSec);
 
         //Assign Weapons
         if (weapons.Length > 0)
         {
             GameObject weapon = Instantiate(weapons[Random.Range(0, weapons.Length)], Vector3.zero, Quaternion.identity);
             weapon.transform.SetParent(hand);
-            weapon.transform.localScale = new Vector3(1, 1, 1);
+            weapon.transform.localScale = new Vector3(10, 10, 10);
             weapon.transform.localPosition = Vector3.zero;
             weapon.transform.localRotation = Quaternion.identity;
             var setWeapon = weapon.GetComponent<WeaponController>();
-            setWeapon.accuracy = 2;
+            setWeapon.accuracy = 1;
+            setWeapon.throwForce = Random.Range(90, 110);
             setWeapon.isPlayer = false;
             setWeapon.isAI = true;
             setWeapon.isItem = false;
             curWeapon = setWeapon;
+            setWeapon.creature = this;
+            NetworkServer.Spawn(weapon);
         }
 
         //Assign Shields
@@ -111,7 +122,7 @@ public class Creature : MonoBehaviour
         {
             GameObject shield = Instantiate(shields[Random.Range(0, shields.Length)], Vector3.zero, Quaternion.identity);
             shield.transform.SetParent(offhand);
-            shield.transform.localScale = new Vector3(1, 1, 1);
+            shield.transform.localScale = new Vector3(10, 10, 10);
             shield.transform.localPosition = Vector3.zero;
             shield.transform.localRotation = Quaternion.identity;
             var setShield = shield.GetComponent<WeaponController>();
@@ -119,6 +130,8 @@ public class Creature : MonoBehaviour
             setShield.isAI = true;
             setShield.isItem = false;
             curShield = setShield;
+            setShield.creature = this;
+            NetworkServer.Spawn(shield);
         }
 
         //Assign Boss name
@@ -130,8 +143,10 @@ public class Creature : MonoBehaviour
 
     private void Update()
     {
-        if (dead)
+        if (isDead)
         {
+            anim.Play("Die");
+            CancelInvoke();
             return;
         }
 
@@ -141,7 +156,21 @@ public class Creature : MonoBehaviour
         {
             if (health >= runAwayHealth)
             {
-                chaseTarget();
+                if ((classes == Class.Villager || classes == Class.Guard) && !isProvoked)
+                {
+                    wanderCheck();
+                }
+                else
+                {
+                    if (classes == Class.Villager)
+                    {
+                        runAway();
+                    } 
+                    else
+                    {
+                        chaseTarget();
+                    }
+                }
             }
             else
             {
@@ -150,57 +179,58 @@ public class Creature : MonoBehaviour
         }
         else
         {
-            if (!isWandering)
-            {
-                StartCoroutine(Wander());
-            }
-            if (isIdle)
-            {
-                anim.SetTrigger("Idle");
-                if (health <= maxHealth)
-                {
-                    health += Time.deltaTime * 25f;
-                    slider.value = health / maxHealth;
-                }
-            }
-            if (isWalking)
-            {
-                anim.SetTrigger("Walk");
-                transform.position += transform.forward * Time.deltaTime * speed;
-            }
-            if (isRotatingLeft)
-            {
-                transform.Rotate(transform.up * Time.deltaTime * 100);
-            }
-            if (isRotatingRight)
-            {
-                transform.Rotate(-transform.up * Time.deltaTime * 100);
-            }
+            wanderCheck();
         }
 
         if (transform.position.y < -400)
-            Destroy(gameObject);
+            StartCoroutine(player.GetComponent<Player>().CmdDestroyObject(gameObject, 0));
 
         if (health >= maxHealth)
         {
-            healthBar.SetActive(false);
+            slider.gameObject.SetActive(false);
         }
         else
         {
-            healthBar.SetActive(true);
+            slider.gameObject.SetActive(true);
         }
 
-        if (distanceToTarget > 200)
+        if (distanceToTarget > chaseRange)
         {
             audioSource.enabled = false;
         }
         else
         {
             audioSource.enabled = true;
-            if (!audioSource.isPlaying && breath != null)
+        }
+    }
+
+    public void wanderCheck()
+    {
+        if (!isWandering)
+        {
+            StartCoroutine(Wander());
+        }
+        if (isIdle)
+        {
+            networkAnimator.SetTrigger("Idle");
+            if (health <= maxHealth)
             {
-                audioSource.PlayOneShot(breath);
+                health += Time.deltaTime * 25f;
+                slider.value = health / maxHealth;
             }
+        }
+        if (isWalking)
+        {
+            networkAnimator.SetTrigger("Walk");
+            transform.position += transform.forward * Time.deltaTime * speed;
+        }
+        if (isRotatingLeft)
+        {
+            transform.Rotate(transform.up * Time.deltaTime * 100);
+        }
+        if (isRotatingRight)
+        {
+            transform.Rotate(-transform.up * Time.deltaTime * 100);
         }
     }
 
@@ -214,33 +244,14 @@ public class Creature : MonoBehaviour
             } 
             else 
             {
-                anim.SetTrigger("Idle");
+                networkAnimator.SetTrigger("Idle");
             }
         }
         else
         {
             //Run
             transform.position += transform.forward * Time.deltaTime * speed;
-            anim.SetTrigger("Run");
-
-            //Jump
-            if (period >= jumpSec)
-            {
-                gameObject.GetComponent<Rigidbody>().AddForce(new Vector3(0, jumpHeight, 0), ForceMode.Impulse);
-                anim.SetTrigger("Jump");
-                jumpSec = Random.Range(15, 25);
-                period = 0;
-            }
-            period += Time.deltaTime;
-
-            //Roll
-            if (period2 >= rollSec)
-            {
-                anim.SetTrigger("Roll");
-                rollSec = Random.Range(15, 35);
-                period2 = 0;
-            }
-            period2 += Time.deltaTime;
+            networkAnimator.SetTrigger("Run");
         }
 
         //Rotate to player
@@ -253,9 +264,9 @@ public class Creature : MonoBehaviour
 
     public void randomAttack()
     {
-        if (curShield != null && attackNum == 0 && distanceToTarget <= 8)
+        if (curShield != null && attackNum == 2 && distanceToTarget <= 20)
         {
-            anim.SetTrigger("Bash");
+            networkAnimator.SetTrigger("Bash");
         }
         else
         {
@@ -277,11 +288,12 @@ public class Creature : MonoBehaviour
                 {
                     Teleport();
                 }
-                anim.SetTrigger("Ability");
+                if (canAttack)
+                    networkAnimator.SetTrigger("Ability");
             }
             else
             {
-                if (classes == Class.Warrior)
+                if (classes == Class.Warrior || classes == Class.Guard)
                 {
                     anim.SetInteger("AttackIndex", 0);
                 }
@@ -293,10 +305,11 @@ public class Creature : MonoBehaviour
                 {
                     anim.SetInteger("AttackIndex", 2);
                 }
-                anim.SetTrigger("Attack");
+                if (canAttack)
+                    networkAnimator.SetTrigger("Attack");
             }
         }
-        anim.SetTrigger("Idle");
+        networkAnimator.SetTrigger("Idle");
     }
 
     public void runAway()
@@ -306,26 +319,72 @@ public class Creature : MonoBehaviour
             if (canAttack)
             {
                 randomAttack();
+
+                //Rotate to player
+                Vector3 direction = (player.position - transform.position).normalized;
+                if (classes == Class.Ghost)
+                    transform.LookAt(player);
+                else
+                    transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(new Vector3(direction.x, 0, direction.z)), rotationSpeed * Time.deltaTime);
             } 
             else
             {
-                anim.SetTrigger("Idle");
+                networkAnimator.SetTrigger("Idle");
             }
         } 
-        else if (distanceToTarget > attackRange)
+        else
         {
-            transform.position -= transform.forward * Time.deltaTime * speed;
-            anim.SetTrigger("RunAway");
-            Vector3 direction = (player.position - transform.position).normalized;
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(new Vector3(direction.x, 0, direction.z)), rotationSpeed * Time.deltaTime);
+            if (classes == Class.Villager)
+            {
+                transform.position += transform.forward * Time.deltaTime * speed;
+                networkAnimator.SetTrigger("Run");
+                Vector3 direction2 = (transform.position - player.position).normalized;
+                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(new Vector3(direction2.x, 0, direction2.z)), rotationSpeed * Time.deltaTime);
+            } else
+            {
+                transform.position -= transform.forward * Time.deltaTime * speed;
+                networkAnimator.SetTrigger("RunAway");
+                Vector3 direction = (player.position - transform.position).normalized;
+                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(new Vector3(direction.x, 0, direction.z)), rotationSpeed * Time.deltaTime);
+            }
         }         
+    }
+
+    public void jump()
+    {
+        gameObject.GetComponent<Rigidbody>().AddForce(new Vector3(0, jumpHeight, 0), ForceMode.Impulse);
+        networkAnimator.SetTrigger("Jump");
+        jumpSec = Random.Range(10, 25);
+    }
+
+    public void roll()
+    {
+        gameObject.GetComponent<Rigidbody>().AddForce(0, 0, 1, ForceMode.Impulse);
+        networkAnimator.SetTrigger("Roll");
+        rollSec = Random.Range(10, 30);
+    }
+
+    public void idleAudio()
+    {
+        if (idle.Length > 0 && audioSource.enabled && !audioSource.isPlaying)
+        {
+            audioSource.PlayOneShot(idle[Random.Range(0, idle.Length)]);
+        }
+        idleAudioSec = Random.Range(1, 5);
+    }
+
+    public void JumpParticle()
+    {
+        GameObject particle = Instantiate(dustParticle, transform.position - new Vector3(0, 10, 0), Quaternion.identity);
+        particle.transform.localScale = new Vector3(10, 10, 10);
+        Destroy(particle, 2);
     }
 
     public IEnumerator Wander()
     {
-        int rotTime = Random.Range(1, rotSec);
-        int idleTime = Random.Range(1, idleSec);
-        int walkTime = Random.Range(1, walkSec);
+        int rotTime = Random.Range(1, 3);
+        int idleTime = Random.Range(1, 10);
+        int walkTime = Random.Range(1, 8);
         int turnChance = Random.Range(1, 3);
 
         isWandering = true;
@@ -351,12 +410,6 @@ public class Creature : MonoBehaviour
         isRotatingRight = false;
 
         isWandering = false;
-    }
-
-    public void Step()
-    {
-        if (audioSource.enabled)
-            audioSource.PlayOneShot(footstep);
     }
 
     //Attacks
@@ -388,6 +441,7 @@ public class Creature : MonoBehaviour
         projectile.AddComponent<Projectile>();
         projectile.GetComponent<Rigidbody>().AddForce(forceToAdd, ForceMode.Impulse);
         curWeapon.gameObject.SetActive(false);
+        NetworkServer.Spawn(projectile);
     }
 
     public void ChangeSpear()
@@ -412,6 +466,7 @@ public class Creature : MonoBehaviour
         projectile.GetComponent<WeaponController>().isAI = true;
         projectile.GetComponent<WeaponController>().weaponDamage = curWeapon.weaponDamage;
         projectile.GetComponent<Rigidbody>().AddForce(forceToAdd, ForceMode.Impulse);
+        NetworkServer.Spawn(projectile);
     }
 
     public IEnumerator ResetAttackCoolDown()
@@ -432,9 +487,10 @@ public class Creature : MonoBehaviour
                 if (Physics.Raycast(transform.position + new Vector3(Random.Range(-20, 20), 350, Random.Range(-20, 20)), Vector3.down, out RaycastHit hit, 350.0f))
                 {
                     GameObject particle = Instantiate(smashParticles, hit.point, Quaternion.identity);
+                    NetworkServer.Spawn(particle);
                     if (particleTime != 0)
                     {
-                        Destroy(particle, particleTime);
+                        StartCoroutine(player.GetComponent<Player>().CmdDestroyObject(particle, particleTime));
                     }
                     audioSource.PlayOneShot(smashSound);
                     health += 50;
@@ -447,7 +503,8 @@ public class Creature : MonoBehaviour
             if (smashParticles != null)
             {
                 GameObject particle = Instantiate(smashParticles, hand.position, Quaternion.identity);
-                Destroy(particle, particleTime);
+                NetworkServer.Spawn(particle);
+                StartCoroutine(player.GetComponent<Player>().CmdDestroyObject(particle, particleTime));
                 audioSource.PlayOneShot(smashSound);
             }
         }
@@ -462,7 +519,8 @@ public class Creature : MonoBehaviour
                 GameObject particle = Instantiate(lazar, hand.position + new Vector3(Random.Range(-5, 5), -2, 0), Quaternion.identity);
                 particle.transform.rotation = transform.rotation;
                 particle.transform.SetParent(transform);
-                Destroy(particle, lazarTime);
+                NetworkServer.Spawn(particle);
+                StartCoroutine(player.GetComponent<Player>().CmdDestroyObject(particle, particleTime));
                 audioSource.PlayOneShot(lazarSound);
                 health += 50;
                 slider.value = health / maxHealth;
@@ -473,23 +531,27 @@ public class Creature : MonoBehaviour
             GameObject particle = Instantiate(lazar, hand.position, Quaternion.identity);
             particle.transform.rotation = transform.rotation;
             particle.transform.SetParent(transform);
-            Destroy(particle, lazarTime);
+            NetworkServer.Spawn(particle);
+            StartCoroutine(player.GetComponent<Player>().CmdDestroyObject(particle, particleTime));
             audioSource.PlayOneShot(lazarSound);
         }
     }
 
     public void SummonTroops()
     {
-        Instantiate(troop, hand.position, Quaternion.identity);
+        GameObject troops = Instantiate(troop, hand.position, Quaternion.identity);
+        NetworkServer.Spawn(troops);
         GameObject particle = Instantiate(troopParticle, hand.position, Quaternion.identity);
-        Destroy(particle, 3);
+        NetworkServer.Spawn(particle);
+        StartCoroutine(player.GetComponent<Player>().CmdDestroyObject(particle, 3));
         audioSource.PlayOneShot(summonSound);
     }
 
     public void Teleport()
     {
         GameObject particle = Instantiate(teleportParticle, transform.position, Quaternion.identity);
-        Destroy(particle, 2);
+        NetworkServer.Spawn(particle);
+        StartCoroutine(player.GetComponent<Player>().CmdDestroyObject(particle, 2));
         transform.position = player.position + new Vector3(Random.Range(-25, 25), 0, Random.Range(-25, 25));
         audioSource.PlayOneShot(teleportSound);
     }
@@ -499,7 +561,8 @@ public class Creature : MonoBehaviour
         health += amount;
 
         slider.value = health / maxHealth;
-        audioSource.PlayOneShot(hurt);
+        if (damaged.Length > 0 && audioSource.enabled)
+            audioSource.PlayOneShot(damaged[Random.Range(0, damaged.Length)]);
         anim.Play("Hit");
 
         if (health > maxHealth)
@@ -507,11 +570,12 @@ public class Creature : MonoBehaviour
             health = maxHealth;
         }
 
-        if (health <= 0 && !dead)
+        if (health <= 0 && !isDead)
         {
-            dead = true;
-            audioSource.PlayOneShot(death);
-            anim.Play("Die");
+            isDead = true;
+            if (death.Length > 0 && audioSource.enabled)
+                audioSource.PlayOneShot(death[Random.Range(0, death.Length)]);
+
             if (classes == Class.Ghost)
             {
                 gameObject.GetComponent<Rigidbody>().useGravity = true;
@@ -523,12 +587,14 @@ public class Creature : MonoBehaviour
                 if (Random.value > 1 - curWeapon.weaponDropChance)
                 {
                     GameObject weapon = Instantiate(curWeapon.gameObject, transform.position + new Vector3(0, 4, 0), Quaternion.identity);
-                    weapon.transform.localScale = new Vector3(5, 5, 5);
+                    weapon.transform.localScale = new Vector3(10, 10, 10);
                     weapon.transform.SetParent(transform.parent);
                     var setWeapon = weapon.GetComponent<WeaponController>();
                     setWeapon.isPlayer = false;
                     setWeapon.isAI = false;
                     setWeapon.isItem = true;
+                    setWeapon.weaponDurability = Random.Range(0.1f, 0.8f);
+                    NetworkServer.Spawn(weapon);
                 }
                 curWeapon.gameObject.SetActive(false);
             }
@@ -539,33 +605,35 @@ public class Creature : MonoBehaviour
                 if (Random.value > 1 - curShield.weaponDropChance)
                 {
                     GameObject shield = Instantiate(curShield.gameObject, transform.position + new Vector3(0, 4, 0), Quaternion.identity);
-                    shield.transform.localScale = new Vector3(5, 5, 5);
+                    shield.transform.localScale = new Vector3(10, 10, 10);
                     shield.transform.SetParent(transform.parent);
                     var setShield = shield.GetComponent<WeaponController>();
                     setShield.isPlayer = false;
                     setShield.isAI = false;
                     setShield.isItem = true;
+                    setShield.weaponDurability = Random.Range(0.1f, 0.8f);
+                    NetworkServer.Spawn(shield);
                 }
                 curShield.gameObject.SetActive(false);
             }
 
-            if (isBoss)
+            var playerXP = player.GetComponent<Player>();
+            playerXP.xpNum += xp;
+            while (playerXP.xpNum >= 100)
             {
-                MapGenerator mapGenerator = FindObjectOfType<MapGenerator>();
-                if (mapGenerator.biome == (MapGenerator.Biome)7)
-                {
-                    mapGenerator.biome = 0;
-                    FindObjectOfType<SettingsMenu>().endGamePause();
-                }
-                else
-                {
-                    mapGenerator.biome = (MapGenerator.Biome)(int)mapGenerator.biome + 1;
-                }
-                mapGenerator.CheckBiome();
+                playerXP.xpNum -= 100;
+                playerXP.levelNum++;
             }
+            playerXP.levelSlider.value = playerXP.xpNum;
+            playerXP.levelText.text = "Level " + playerXP.levelNum;
 
-            Destroy(gameObject, 5);
+            StartCoroutine(player.GetComponent<Player>().CmdDestroyObject(gameObject, 5));
         }
+    }
+
+    public void dead()
+    {
+        anim.enabled = false;
     }
 
     void OnDrawGizmosSelected()

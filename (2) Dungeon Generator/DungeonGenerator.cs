@@ -1,8 +1,9 @@
+using Mirror;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class DungeonGenerator : MonoBehaviour
+public class DungeonGenerator : NetworkBehaviour
 {
     public class Cell
     {
@@ -92,10 +93,9 @@ public class DungeonGenerator : MonoBehaviour
                     dungeonLocation = new Vector3(i * offset.x, 0, -j * offset.y) + transform.position - new Vector3(0, 1500, 0);
                     var randRoom = rooms[randomRoom].room;
                     var newRoom = Instantiate(randRoom, dungeonLocation, Quaternion.identity, transform).GetComponent<RoomBehaviour>();
-
                     newRoom.UpdateRoom(currentCell.status);
                     newRoom.name += " " + i + "-" + j;
-
+                    NetworkServer.Spawn(newRoom.gameObject);
                 }
             }
         }

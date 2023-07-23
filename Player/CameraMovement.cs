@@ -7,6 +7,6 @@ public class CameraMovement : MonoBehaviour
 
     private void Update()
     {
-        transform.rotation = Quaternion.Euler(0, Mathf.Sin(Time.realtimeSinceStartup * speed) * rotAngle, 0);
+        transform.rotation = Quaternion.Euler(0, -90 + Mathf.Sin(Time.realtimeSinceStartup * speed) * rotAngle, 0);
     }
 }

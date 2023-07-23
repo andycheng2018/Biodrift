@@ -7,28 +7,20 @@ public class TestingNetcodeUI : NetworkBehaviour
 {
     [SerializeField] private Button startHostButton;
     [SerializeField] private Button startClientButton;
-    [SerializeField] private TMP_Text playersCountText;
-
-    private NetworkVariable<int> playersNum = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone);
+    public GameObject eventSystem;
 
     private void Awake()
     {
         startHostButton.onClick.AddListener(() => {
             Debug.Log("HOST");
             NetworkManager.Singleton.StartHost();
+            eventSystem.SetActive(false);
         });
         startClientButton.onClick.AddListener(() =>
         {
             Debug.Log("CLIENT");
             NetworkManager.Singleton.StartClient();
+            eventSystem.SetActive(false);
         });
-    }
-
-    private void Update()
-    {
-        playersCountText.text = "Players: " + playersNum.Value.ToString();
-
-        if (!IsServer) { return; }
-        playersNum.Value = NetworkManager.Singleton.ConnectedClients.Count;
     }
 }

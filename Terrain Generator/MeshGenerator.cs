@@ -1,9 +1,8 @@
 using UnityEngine;
-using System.Collections.Generic;
 
 public static class MeshGenerator
 {
-	public static MeshData GenerateTerrainMesh(float[,] heightMap, float heightMultiplier, AnimationCurve _heightCurve, int levelOfDetail)
+	public static MeshData GenerateTerrainMesh(float[,] heightMap, float heightMultiplier, AnimationCurve _heightCurve, int levelOfDetail, bool useFlatShading)
 	{
 		AnimationCurve heightCurve = new AnimationCurve(_heightCurve.keys);
 
@@ -34,6 +33,12 @@ public static class MeshGenerator
 				vertexIndex++;
 			}
 		}
+
+		if (useFlatShading)
+		{
+			meshData.FlatShading();
+		}
+
 		return meshData;
 	}
 }
@@ -61,7 +66,23 @@ public class MeshData
 		triangleIndex += 3;
 	}
 
-	public Mesh CreateMesh()
+    public void FlatShading()
+    {
+        Vector3[] flatShadedVertices = new Vector3[triangles.Length];
+        Vector2[] flatShadedUvs = new Vector2[triangles.Length];
+
+        for (int i = 0; i < triangles.Length; i++)
+        {
+            flatShadedVertices[i] = vertices[triangles[i]];
+            flatShadedUvs[i] = uvs[triangles[i]];
+            triangles[i] = i;
+        }
+
+        vertices = flatShadedVertices;
+        uvs = flatShadedUvs;
+    }
+
+    public Mesh CreateMesh()
 	{
 		Mesh mesh = new Mesh();
 		mesh.vertices = vertices;

@@ -1,14 +1,13 @@
 using UnityEngine;
 using System.Collections.Generic;
 using Unity.Netcode;
+using System.Collections;
 
 public class EndlessTerrain : NetworkBehaviour
 {
 	public LODInfo[] detailLevels;
 	public static float maxViewDst;
-
-	public Transform viewer;
-	public static Player playerInstance;
+	public static Transform viewer;
 	public static Vector2 viewerPosition;
 	Vector2 viewerPositionOld;
 	static MapGenerator mapGenerator;
@@ -16,27 +15,14 @@ public class EndlessTerrain : NetworkBehaviour
 	int chunksVisibleInViewDst;
 	const float viewerMoveThresholdForChunkUpdate = 25f;
 	const float sqrViewerMoveThresholdForChunkUpdate = viewerMoveThresholdForChunkUpdate * viewerMoveThresholdForChunkUpdate;
+	public static bool checkServer;
 
 	Dictionary<Vector2, TerrainChunk> terrainChunkDictionary = new Dictionary<Vector2, TerrainChunk>();
 	static List<TerrainChunk> terrainChunksVisibleLastUpdate = new List<TerrainChunk>();
 
     public override void OnNetworkSpawn()
     {
-        mapGenerator = FindObjectOfType<MapGenerator>();
-        viewer = Player.playerInstance.transform;
-
-        if (FindObjectOfType<StoreVariables>() != null)
-        {
-            var storeVariables = FindObjectOfType<StoreVariables>();
-            mapGenerator.seed = storeVariables.seedInt;
-            mapGenerator.difficulty = (MapGenerator.Difficulty)(int)storeVariables.difficultyInt;
-        }
-
-        maxViewDst = detailLevels[detailLevels.Length - 1].visibleDstThreshold;
-        chunkSize = MapGenerator.mapChunkSize - 1;
-        chunksVisibleInViewDst = Mathf.RoundToInt(maxViewDst / chunkSize);
-
-        UpdateVisibleChunks();
+		StartCoroutine(startGame());
     }
 
     private void Update()
@@ -55,9 +41,27 @@ public class EndlessTerrain : NetworkBehaviour
         }
     }
 
+	private IEnumerator startGame()
+	{
+		yield return new WaitForSeconds(0.1f);
+        mapGenerator = FindObjectOfType<MapGenerator>();
+		viewer = Player.instance.transform;
+        maxViewDst = detailLevels[detailLevels.Length - 1].visibleDstThreshold;
+        chunkSize = MapGenerator.mapChunkSize - 1;
+        chunksVisibleInViewDst = Mathf.RoundToInt(maxViewDst / chunkSize);
+        checkServer = IsServer;
+        if (FindObjectOfType<LobbySaver>() != null)
+        {
+            var storeVariables = FindObjectOfType<LobbySaver>();
+            mapGenerator.seed = storeVariables.seedInt;
+			mapGenerator.difficulty = storeVariables.difficultyInt;
+        }
+        UpdateVisibleChunks();
+    }
+
 	private void UpdateVisibleChunks()
 	{
-		for (int i = 0; i < terrainChunksVisibleLastUpdate.Count; i++)
+        for (int i = 0; i < terrainChunksVisibleLastUpdate.Count; i++)
 		{
 			terrainChunksVisibleLastUpdate[i].SetVisible(false);
 		}
@@ -84,12 +88,13 @@ public class EndlessTerrain : NetworkBehaviour
 		}
 	}
 
-	public class TerrainChunk
+	public class TerrainChunk : MonoBehaviour
 	{
 		GameObject chunk;
 		GameObject meshObject;
 		GameObject water;
 		GameObject vegetation;
+		Material grassMat;
 
 		Vector2 position;
 		Bounds bounds;
@@ -118,20 +123,22 @@ public class EndlessTerrain : NetworkBehaviour
 			meshRenderer = meshObject.AddComponent<MeshRenderer>();
 			meshFilter = meshObject.AddComponent<MeshFilter>();
 			meshCollider = meshObject.AddComponent<MeshCollider>();
-			meshRenderer.materials = new Material[] { material, material2 };
+			grassMat = Instantiate(material2);
+            meshRenderer.materials = new Material[] { material, grassMat };
 			meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 			meshObject.transform.position = positionV3 * scale;
 			meshObject.transform.localScale = Vector3.one * scale;
 			meshObject.isStatic = true;
 
-			water = Instantiate(waterObject, positionV3 * scale + new Vector3(0, 22, 0), Quaternion.identity);
+            water = Instantiate(waterObject, positionV3 * scale, Quaternion.identity);
+			water.transform.localScale *= mapGenerator.scale;
 
-			vegetation = new GameObject("Vegetation");
-			vegetation.transform.position = positionV3 * scale;
+            vegetation = new GameObject("Vegetation");
+            vegetation.transform.position = positionV3 * scale;
 			vegetation.isStatic = true;
 
             chunk = new GameObject("Chunk");
-			meshObject.transform.SetParent(chunk.transform);
+            meshObject.transform.SetParent(chunk.transform);
 			water.transform.SetParent(chunk.transform);
 			vegetation.transform.SetParent(chunk.transform);
 			chunk.transform.parent = parent;
@@ -158,12 +165,10 @@ public class EndlessTerrain : NetworkBehaviour
 
             Texture2D texture = TextureGenerator.TextureFromColorMap(mapData.biomeMap, MapGenerator.mapChunkSize, MapGenerator.mapChunkSize);
             meshRenderer.material.mainTexture = texture;
+			grassMat.color = texture.GetPixelBilinear(MapGenerator.mapChunkSize, MapGenerator.mapChunkSize);
 
-			if (meshObject.activeSelf)
-			{
-                CreateVegetationClientRpc();
-            }
-			//CreateStructure();
+            CreateVegetationServerRpc();
+            CreateStructureServerRpc();
 
             UpdateTerrainChunk();
 		}        
@@ -224,7 +229,14 @@ public class EndlessTerrain : NetworkBehaviour
 			}
 		}
 
-		[ClientRpc]
+        [ServerRpc(RequireOwnership = false)]
+        public void CreateVegetationServerRpc()
+        {
+            if (!checkServer) { return; }
+            CreateVegetationClientRpc();
+        }
+
+        [ClientRpc]
         public void CreateVegetationClientRpc()
         {
             int width = mapData.heightMap.GetLength(0);
@@ -235,24 +247,37 @@ public class EndlessTerrain : NetworkBehaviour
             float scale = mapGenerator.scale;
 
             foreach (PoissonSampleData sample in mapData.poissonDiskSamples)
-			{
-				float posX = (topLeftX + sample.position.x) * scale;
+            {
+                if (sample.vegetations.Length <= 0) { return; }
+                float posX = (topLeftX + sample.position.x) * scale;
                 float treeHeight = mapData.heightCurve.Evaluate(mapData.heightMap[(int)sample.position.x, (int)sample.position.y]) * mapData.heightMultiplier * scale;
-				float posZ = (topLeftZ - sample.position.y) * scale;
+                float posZ = (topLeftZ - sample.position.y) * scale;
                 var thisVegetation = sample.vegetations[Random.Range(0, sample.vegetations.Length)];
-                float randomScale = Random.Range(thisVegetation.scale.x, thisVegetation.scale.y) * scale;
-
-                GameObject veg = Instantiate(thisVegetation.vegetation, vegetation.transform.position + new Vector3(posX, treeHeight, posZ), Quaternion.identity, vegetation.transform);
+				if (thisVegetation.vegetation == null) { return; }
+                GameObject veg = Instantiate(thisVegetation.vegetation, vegetation.transform.position + new Vector3(posX, treeHeight, posZ), Quaternion.identity);
                 veg.transform.eulerAngles = new Vector3(Random.Range(-10, 10), Random.Range(-180, 180f), Random.Range(-10, 10));
-                veg.transform.localScale = new Vector3(randomScale, randomScale, randomScale);
                 veg.transform.position += new Vector3(0, thisVegetation.addHeight, 0);
-				var vegNetwork = veg.GetComponent<NetworkObject>();
-				if (vegNetwork != null)
-					vegNetwork.Spawn();
+                if (veg.GetComponent<Rigidbody>() != null)
+                {
+                    veg.GetComponent<Rigidbody>().isKinematic = true;
+                }
+                if (veg.GetComponent<NetworkObject>() != null)
+                {
+                    veg.GetComponent<NetworkObject>().Spawn(true);
+                }
+				veg.transform.SetParent(mapGenerator.vegetationHolder.transform);
             }
         }
 
-        public void CreateStructure()
+        [ServerRpc(RequireOwnership = false)]
+        public void CreateStructureServerRpc()
+		{
+            if (!checkServer) { return; }
+			CreateStructureClientRpc();
+        }
+
+        [ClientRpc]
+        public void CreateStructureClientRpc()
         {
             int width = mapData.heightMap.GetLength(0);
             int height = mapData.heightMap.GetLength(1);
@@ -260,35 +285,38 @@ public class EndlessTerrain : NetworkBehaviour
             float topLeftX = (width - 1) / -2f;
             float topLeftZ = (height - 1) / 2f;
             float scale = mapGenerator.scale;
-            int randStructure = Random.Range(0, mapData.poissonDiskSamples[Random.Range(0, mapData.poissonDiskSamples.Count)].structures.Length);
-            float randPercent = Random.value;
+			if (mapData.poissonDiskSamples2.Count <= 0) { return; }
+            int randStructure = Random.Range(0, mapData.poissonDiskSamples2[Random.Range(0, mapData.poissonDiskSamples2.Count)].structures.Length);
 
-            foreach (PoissonSampleData sample in mapData.poissonDiskSamples)
+            foreach (PoissonSampleData sample in mapData.poissonDiskSamples2)
             {
-                if (randPercent > 1 - sample.structures[randStructure].structureSpawnPercent)
-				{
-                    float posX = (topLeftX + sample.position.x) * scale;
-                    float objectHeight = mapData.heightCurve.Evaluate(mapData.heightMap[(int)sample.position.x, (int)sample.position.y]) * mapData.heightMultiplier * scale;
-                    float posZ = (topLeftZ - sample.position.y) * scale;
-                    var structure = sample.structures[randStructure];
-                    var prop = structure.props[Random.Range(0, structure.props.Length)];
-                    float randomScale = Random.Range(prop.scale.x, prop.scale.y) * scale;
-
-                    GameObject thisStructure = Instantiate(prop.prop, vegetation.transform.position + new Vector3(posX, objectHeight, posZ), Quaternion.identity, vegetation.transform);
-                    thisStructure.transform.eulerAngles = new Vector3(0, Random.Range(-180, 180f), 0);
-                    thisStructure.transform.localScale = new Vector3(randomScale, randomScale, randomScale);
-                    thisStructure.transform.position += new Vector3(0, prop.addHeight, 0);
+                if (sample.structures.Length <= 0) { return; }
+                float posX = (topLeftX + sample.position.x) * scale;
+                float objectHeight = mapData.heightCurve.Evaluate(mapData.heightMap[(int)sample.position.x, (int)sample.position.y]) * mapData.heightMultiplier * scale;
+                float posZ = (topLeftZ - sample.position.y) * scale;
+                var structure = sample.structures[randStructure];
+                var prop = structure.props[Random.Range(0, structure.props.Length)];
+				if (prop.prop == null) { return; }
+                GameObject thisProp = Instantiate(prop.prop, vegetation.transform.position + new Vector3(posX, objectHeight, posZ), Quaternion.identity);
+                thisProp.transform.eulerAngles = new Vector3(0, Random.Range(-180, 180f), 0);
+                thisProp.transform.position += new Vector3(0, prop.addHeight, 0);
+                if (thisProp.GetComponent<Rigidbody>() != null)
+                {
+                    thisProp.GetComponent<Rigidbody>().isKinematic = true;
                 }
+                if (thisProp.GetComponent<NetworkObject>() != null)
+                {
+                    thisProp.GetComponent<NetworkObject>().Spawn(true);
+                }
+                thisProp.transform.SetParent(mapGenerator.vegetationHolder.transform);
             }
         }
 
         public void SetVisible(bool visible)
 		{
-			if (chunk != null)
-			{
-                chunk.SetActive(visible);
-            }
-		}
+			if (chunk == null) { return; }
+            chunk.SetActive(visible);
+        }
 	}
 
 	class LODMesh

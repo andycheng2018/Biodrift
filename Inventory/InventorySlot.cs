@@ -1,262 +1,452 @@
 using TMPro;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
 
 public class InventorySlot : MonoBehaviour
 {
-    public Item item;
+    [Header("Inventory Slot")]
+    public Image background;
+    public Image icon;
     public TMP_Text text;
     public TMP_Text amount;
-    public Image icon;
+    public TMP_Text equipText;
     public Slider durabilitySlider;
-    public GameObject itemObject;
-
-    public Sprite defaultIcon;
-    public string defaultText;
-    private Player player;
-    private Vector3 scale;
+    public GameObject selectionPanel;
+    public Button button;
+    public Color normal;
+    public Color selected;
+    [HideInInspector] public Item item;
+    [HideInInspector] public Player player;
 
     private void Start()
     {
-        player = Player.playerInstance;
-        if (item != null)
-        {
-            itemObject = item.gameObject;
-            scale = itemObject.transform.localScale;
-        }
+        player = Player.instance;
+        background.color = normal;
     }
 
     private void Update()
     {
-        if (item != null)
+        if (item == null) { return; }
+
+        //Update Count
+        amount.text = item.networkAmount.Value + "/" + item.amount.y;
+
+        //Hide Count
+        if (item.networkAmount.Value == 1)
         {
-            amount.text = item.amount.ToString();
-            if (item.amount == 1)
+            amount.enabled = false;
+        }
+        else
+        {
+            amount.enabled = true;
+        }
+
+        //Destroy if equal to zero
+        if (item.networkAmount.Value <= 0)
+        {
+            player.Items.Remove(item);
+            Destroy(gameObject);
+        }
+
+        if (item.itemType == Item.ItemType.Weapon)
+        {
+            var weaponController = item.GetComponent<WeaponController>();
+            durabilitySlider.value = weaponController.weaponDurability;
+
+            //Hide durability slider if value is 1
+            if (durabilitySlider.value == 1)
             {
-                amount.enabled = false;
+                durabilitySlider.gameObject.SetActive(false);
             }
             else
             {
-                amount.enabled = true;
-            }
-
-            if (item.itemType == Item.ItemType.Weapon || item.itemType == Item.ItemType.Shield)
-            {
-                var weaponController = itemObject.GetComponent<WeaponController>();
-                durabilitySlider.value = weaponController.weaponDurability;
-                if (durabilitySlider.value == 0)
-                {
-                    if (weaponController.type == WeaponController.Types.Shield)
-                    {
-                        if (player.curShield != null)
-                        {
-                            Destroy(itemObject);
-                            Player.playerInstance.Items.Remove(item);
-                            item = null;
-                            text.text = defaultText;
-                            amount.text = "1";
-                            icon.sprite = defaultIcon;
-                            player.curShield = null;
-                        }
-                    }
-                    else
-                    {
-                        if (player.curWeapon != null)
-                        {
-                            Destroy(itemObject);
-                            Player.playerInstance.Items.Remove(item);
-                            item = null;
-                            text.text = defaultText;
-                            amount.text = "1";
-                            icon.sprite = defaultIcon;
-                            player.curWeapon = null;
-                        }
-                    }
-                }
-
-                if (durabilitySlider.value == 1)
-                {
-                    durabilitySlider.gameObject.SetActive(false);
-                }
-                else
-                {
-                    durabilitySlider.gameObject.SetActive(true);
-                }
-            } else
-            {
-                durabilitySlider.gameObject.SetActive(false);
+                durabilitySlider.gameObject.SetActive(true);
             }
         } else
         {
             durabilitySlider.gameObject.SetActive(false);
         }
-    }
 
-    public void Use()
-    {
-        if (item.itemType == Item.ItemType.Weapon)
+        if (item.itemType == Item.ItemType.Food)
         {
-            if (player.curWeapon == null)
-            {
-                player.sword.item = item;
-                player.sword.icon.sprite = item.icon;
-                player.sword.text.text = item.name;
-                var weapon = item.gameObject;
-                weapon.SetActive(true);
-                weapon.transform.SetParent(player.hand);
-                weapon.transform.localPosition = Vector3.zero;
-                weapon.transform.localRotation = Quaternion.identity;
-                weapon.transform.localScale = new Vector3(10, 10, 10);
-                player.curWeapon = weapon.GetComponent<WeaponController>();
-                Destroy(gameObject);
-            }
-            else
-            {
-                var thisItem = player.sword.item;
-                var thisSprite = player.sword.item.icon;
-                var thisText = player.sword.item.name;
-                player.sword.item = item;
-                player.sword.icon.sprite = item.icon;
-                player.sword.text.text = item.name;
-                player.curWeapon.gameObject.SetActive(false);
-                var weapon = item.gameObject;
-                weapon.SetActive(true);
-                weapon.transform.SetParent(player.hand);
-                weapon.transform.localPosition = Vector3.zero;
-                weapon.transform.localRotation = Quaternion.identity;
-                weapon.transform.localScale = new Vector3(10, 10, 10);
-                player.curWeapon = weapon.GetComponent<WeaponController>();
-                item = thisItem;
-                icon.sprite = thisSprite;
-                text.text = thisText;
-            }
+            background.color = normal;
+            equipText.text = "Consume";
         }
 
-        if (item.itemType == Item.ItemType.Shield)
+        if (item.itemType == Item.ItemType.Resource)
         {
-            if (player.curShield == null)
-            {
-                player.shield.item = item;
-                player.shield.icon.sprite = item.icon;
-                player.shield.text.text = item.name;
-                var weapon = item.gameObject;
-                weapon.SetActive(true);
-                weapon.transform.SetParent(player.offhand);
-                weapon.transform.localPosition = Vector3.zero;
-                weapon.transform.localRotation = Quaternion.identity;
-                weapon.transform.localScale = new Vector3(10, 10, 10);
-                player.curShield = weapon.GetComponent<WeaponController>();
-                Destroy(gameObject);
-            }
-            else
-            {
-                var thisItem = player.shield.item;
-                var thisSprite = player.shield.item.icon;
-                var thisText = player.shield.item.name;
-                player.shield.item = item;
-                player.shield.icon.sprite = item.icon;
-                player.shield.text.text = item.name;
-                player.curShield.gameObject.SetActive(false);
-                var weapon = item.gameObject;
-                weapon.SetActive(true);
-                weapon.transform.SetParent(player.offhand);
-                weapon.transform.localPosition = Vector3.zero;
-                weapon.transform.localRotation = Quaternion.identity;
-                weapon.transform.localScale = new Vector3(10, 10, 10);
-                player.curShield = weapon.GetComponent<WeaponController>();
-                item = thisItem;
-                icon.sprite = thisSprite;
-                text.text = thisText;
-            }
-        }
-
-        if (item.itemType == Item.ItemType.Food /*&& (player.health.Value < player.maxHealth)*/)
-        {
-            //player.health.Value += item.healAmount;
-            //player.healthSlider.value = player.health.Value / player.maxHealth;
-            player.audioSource2.PlayOneShot(player.heal);
-
-            if (item.amount == 1)
-            {
-                Player.playerInstance.Items.Remove(item);
-                Destroy(gameObject);
-            } else
-            {
-                item.amount--;
-            }
+            background.color = normal;
+            equipText.text = "Cancel";
         }
 
         if (item.itemType == Item.ItemType.Building)
         {
-            player.SelectObject(item.gameObject);
-            if (item.amount == 1)
+            background.color = normal;
+            equipText.text = "Place";
+        }
+
+        if (item.itemType == Item.ItemType.Weapon)
+        {
+            WeaponController thisWeapon = item.GetComponent<WeaponController>();
+            if ((player.curShield != null && player.curShield == thisWeapon) || (player.curWeapon != null && player.curWeapon == thisWeapon))
             {
-                Player.playerInstance.Items.Remove(item);
-                Destroy(gameObject);
+                background.color = selected;
+                equipText.text = "Unequip";
             } else
             {
-                item.amount--;
+                background.color = normal;
+                equipText.text = "Equip";
             }
+        }
+
+        if (item.itemType == Item.ItemType.Armor)
+        {
+            Armor thisArmor = item.GetComponent<Armor>();
+            if ((player.currentHelmet != null && player.currentHelmet == thisArmor) || (player.currentChestplate != null && player.currentChestplate == thisArmor) || (player.currentLeggings != null && player.currentLeggings == thisArmor) || (player.currentBoots != null && player.currentBoots == thisArmor))
+            {
+                background.color = selected;
+                equipText.text = "Unequip";
+            }
+            else
+            {
+                background.color = normal;
+                equipText.text = "Equip";
+            }
+        }
+    }
+
+    public void SelectionPanel1()
+    {
+        if (selectionPanel.activeSelf)
+        {
+            selectionPanel.SetActive(false);
+        } else
+        {
+            selectionPanel.SetActive(true);
+        }
+    }
+
+    public void Equip()
+    {
+        if (item == null) { return; }
+
+        if (item.itemType == Item.ItemType.Weapon)
+        {
+            WeaponController thisWeapon = item.GetComponent<WeaponController>();
+            item.setActiveServerRpc(true);
+            item.transform.localPosition = Vector3.zero;
+            item.transform.localRotation = Quaternion.identity;
+            item.GetComponent<Rigidbody>().isKinematic = true;
+
+            if (thisWeapon.type == WeaponController.Types.Shield)
+            {
+                if (player.curShield == thisWeapon)
+                {
+                    player.curShield.ChangeParentServerRpc(3, player.GetComponent<NetworkObject>());
+                    player.curShield.GetComponent<Item>().setActiveServerRpc(false);
+                    player.curShield = null;
+                } else if (player.curShield != null) {
+                    player.curShield.GetComponent<Item>().setActiveServerRpc(false);
+                    player.curShield = thisWeapon;
+                    player.curShield.ChangeParentServerRpc(2, player.GetComponent<NetworkObject>());
+                } else
+                {
+                    player.curShield = thisWeapon;
+                    player.curShield.ChangeParentServerRpc(2, player.GetComponent<NetworkObject>());
+                }
+            } 
+            else
+            {
+                if (player.curWeapon == thisWeapon)
+                {
+                    player.curWeapon.ChangeParentServerRpc(3, player.GetComponent<NetworkObject>());
+                    player.curWeapon.GetComponent<Item>().setActiveServerRpc(false);
+                    player.curWeapon = null;
+                }
+                else if (player.curWeapon != null)
+                {
+                    player.curWeapon.GetComponent<Item>().setActiveServerRpc(false);
+                    player.curWeapon = thisWeapon;
+                    player.curWeapon.ChangeParentServerRpc(1, player.GetComponent<NetworkObject>());
+                }
+                else
+                {
+                    player.curWeapon = thisWeapon;
+                    player.curWeapon.ChangeParentServerRpc(1, player.GetComponent<NetworkObject>());
+                }
+            }
+        }
+
+        if (item.itemType == Item.ItemType.Armor)
+        {
+            Armor thisArmor = item.GetComponent<Armor>();
+            item.setActiveServerRpc(true);
+            item.transform.localPosition = Vector3.zero;
+            item.transform.localRotation = Quaternion.identity;
+            item.GetComponent<Rigidbody>().isKinematic = true;
+
+            if (thisArmor.armorType == Armor.ArmorType.Helmet)
+            {
+                if (player.currentHelmet == thisArmor)
+                {
+                    player.currentHelmet.GetComponent<Item>().setActiveServerRpc(false);
+                    player.currentHelmet = null;
+                    HideArmor();
+                } else
+                {
+                    player.currentHelmet = thisArmor;
+                    for (int i = 0; i < player.helmet.Length; i++)
+                    {
+                        player.helmet[i].SetActive(false);
+                    }
+                    if (thisArmor.rarity == Armor.Rarity.Stone)
+                    {
+                        player.helmet[0].SetActive(true);
+                    }
+                    else if (thisArmor.rarity == Armor.Rarity.Gold)
+                    {
+                        player.helmet[1].SetActive(true);
+                    }
+                    else if (thisArmor.rarity == Armor.Rarity.Iron)
+                    {
+                        player.helmet[2].SetActive(true);
+                    }
+                    else if (thisArmor.rarity == Armor.Rarity.Sapphire)
+                    {
+                        player.helmet[3].SetActive(true);
+                    }
+                }
+            }
+            else if (thisArmor.armorType == Armor.ArmorType.Chestplate)
+            {
+                if (player.currentChestplate == thisArmor)
+                {
+                    player.currentChestplate.GetComponent<Item>().setActiveServerRpc(false);
+                    player.currentChestplate = null;
+                    HideArmor();
+                } else
+                {
+                    player.currentChestplate = thisArmor;
+                    for (int i = 0; i < player.chestplate.Length; i++)
+                    {
+                        player.chestplate[i].SetActive(false);
+                    }
+                    if (thisArmor.rarity == Armor.Rarity.Stone)
+                    {
+                        player.chestplate[0].SetActive(true);
+                    }
+                    else if (thisArmor.rarity == Armor.Rarity.Gold)
+                    {
+                        player.chestplate[1].SetActive(true);
+                    }
+                    else if (thisArmor.rarity == Armor.Rarity.Iron)
+                    {
+                        player.chestplate[2].SetActive(true);
+                    }
+                    else if (thisArmor.rarity == Armor.Rarity.Sapphire)
+                    {
+                        player.chestplate[3].SetActive(true);
+                    }
+                }
+            }
+            else if (thisArmor.armorType == Armor.ArmorType.Leggings)
+            {
+                if (player.currentLeggings == thisArmor)
+                {
+                    player.currentLeggings.GetComponent<Item>().setActiveServerRpc(false);
+                    player.currentLeggings = null;
+                    HideArmor();
+                } else
+                {
+                    player.currentLeggings = thisArmor;
+                    for (int i = 0; i < player.leggings.Length; i++)
+                    {
+                        player.leggings[i].SetActive(false);
+                    }
+                    if (thisArmor.rarity == Armor.Rarity.Stone)
+                    {
+                        player.leggings[0].SetActive(true);
+                    }
+                    else if (thisArmor.rarity == Armor.Rarity.Gold)
+                    {
+                        player.leggings[1].SetActive(true);
+                    }
+                    else if (thisArmor.rarity == Armor.Rarity.Iron)
+                    {
+                        player.leggings[2].SetActive(true);
+                    }
+                    else if (thisArmor.rarity == Armor.Rarity.Sapphire)
+                    {
+                        player.leggings[3].SetActive(true);
+                    }
+                }
+            }
+            else if (thisArmor.armorType == Armor.ArmorType.Boots)
+            {
+                if (player.currentBoots == thisArmor)
+                {
+                    player.currentBoots.GetComponent<Item>().setActiveServerRpc(false);
+                    player.currentBoots = null;
+                    HideArmor();
+                }
+                else
+                {
+                    player.currentBoots = thisArmor;
+                    for (int i = 0; i < player.boots.Length; i++)
+                    {
+                        player.boots[i].SetActive(false);
+                        player.boots2[i].SetActive(false);
+                    }
+                    if (thisArmor.rarity == Armor.Rarity.Stone)
+                    {
+                        player.boots[0].SetActive(true);
+                        player.boots2[0].SetActive(true);
+                    }
+                    else if (thisArmor.rarity == Armor.Rarity.Gold)
+                    {
+                        player.boots[1].SetActive(true);
+                        player.boots2[1].SetActive(true);
+                    }
+                    else if (thisArmor.rarity == Armor.Rarity.Iron)
+                    {
+                        player.boots[2].SetActive(true);
+                        player.boots2[2].SetActive(true);
+                    }
+                    else if (thisArmor.rarity == Armor.Rarity.Sapphire)
+                    {
+                        player.boots[3].SetActive(true);
+                        player.boots2[3].SetActive(true);
+                    }
+                }   
+            }
+        }
+
+        if (item.itemType == Item.ItemType.Food && (player.hungerSlider.value < 100))
+        {
+            player.hungerSlider.value += item.foodAmount;
+            item.ChangeAmountServerRpc(-1, false);
+        }
+
+        if (item.itemType == Item.ItemType.Building)
+        {
+            item.transform.rotation = Quaternion.identity;
+            player.currentSlot = gameObject.GetComponent<InventorySlot>();
+            player.currentObject = item;
+            player.SelectObject();
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+            player.Inventory.SetActive(false);
+            player.isClosed = true;
+            player.defaultContent.gameObject.SetActive(true);
+            player.craftingContent.gameObject.SetActive(false);
+            player.anvilContent.gameObject.SetActive(false);
+            player.furnanceContent.gameObject.SetActive(false);
+            for (int i = player.materialsContent.transform.childCount - 1; i >= 0; i--)
+            {
+                Destroy(player.materialsContent.transform.GetChild(i).gameObject);
+            }
+            player.craftingButton.recipe = null;
+            player.craftingButton.icon.sprite = null;
+            player.craftingButton.text.text = "Craft Item";
+        }
+
+        if (item.itemType == Item.ItemType.Resource)
+        {
+            selectionPanel.SetActive(false);
         }
     }
 
     public void Remove()
     {
+        if (item == null) { return; }
+
         item.setActiveServerRpc(true);
-        itemObject.transform.position = player.transform.position - new Vector3(0, 3, 0);
-        itemObject.transform.localRotation = Quaternion.identity;
-        itemObject.transform.localScale = scale;
-        itemObject.GetComponent<Collider>().isTrigger = true;
-        itemObject.tag = "Item";
-        Player.playerInstance.Items.Remove(item);
-        Destroy(gameObject);
-        if (itemObject.GetComponent<WeaponController>() != null)
-        {
-            itemObject.GetComponent<WeaponController>().isPlayer = false;
-            itemObject.GetComponent<WeaponController>().isAI = false;
-            itemObject.GetComponent<WeaponController>().isItem = true;
-        }
-    }
+        player.Items.Remove(item);
+        WeaponController thisWeapon = item.GetComponent<WeaponController>();
 
-    public void DefaultSword()
-    {
-        if (player.curWeapon != null)
+        //Check if item is current weapon
+        if (player.curWeapon != null && player.curWeapon == thisWeapon)
         {
-            itemObject.transform.position = player.transform.position - new Vector3(0, 3, 0);
-            itemObject.transform.parent = null;
-            itemObject.transform.localRotation = Quaternion.identity;
-            itemObject.transform.localScale = new Vector3(10, 10, 10);
-            Player.playerInstance.Items.Remove(item);
-            item = null;
-            text.text = defaultText;
-            amount.text = "1";
-            icon.sprite = defaultIcon;
+            player.curWeapon.target = null;
             player.curWeapon = null;
-            itemObject.GetComponent<WeaponController>().isPlayer = false;
-            itemObject.GetComponent<WeaponController>().isAI = false;
-            itemObject.GetComponent<WeaponController>().isItem = true;
-            itemObject.GetComponent<Collider>().isTrigger = true;
         }
+
+        //Check if item is current shield
+        if (player.curShield != null && player.curShield == thisWeapon)
+        {
+            player.curShield.target = null;
+            player.curShield = null;
+        }
+
+        //Drop item
+        item.ChangePositionServerRpc(player.transform.position + new Vector3(2, 4, 2));
+        item.transform.localRotation = Quaternion.identity;
+        item.GetComponent<Collider>().enabled = true;
+        item.GetComponent<Collider>().isTrigger = false;
+        durabilitySlider.gameObject.SetActive(false);
+
+        if (item.itemType == Item.ItemType.Weapon)
+        {
+            thisWeapon.setWeaponServerRpc(false, false);
+        }
+
+        if (item.itemType == Item.ItemType.Armor)
+        {
+            HideArmor();
+        }
+
+
+        if (item.GetComponent<Rigidbody>() != null)
+        {
+            item.GetComponent<Rigidbody>().isKinematic = false;
+        }
+
+        if (item.itemType == Item.ItemType.Building)
+        {
+            player.UndoPlacement();
+        }
+
+        Destroy(gameObject);
     }
 
-    public void DefaultShield()
+    public void HideArmor()
     {
-        if (player.curShield != null)
+        Armor thisArmor = item.GetComponent<Armor>();
+        if (thisArmor.armorType == Armor.ArmorType.Helmet)
         {
-            itemObject.transform.position = player.transform.position - new Vector3(0, 3, 0);
-            itemObject.transform.parent = null;
-            itemObject.transform.localRotation = Quaternion.identity;
-            itemObject.transform.localScale = new Vector3(10, 10, 10);
-            Player.playerInstance.Items.Remove(item);
-            item = null;
-            text.text = defaultText;
-            amount.text = "1";
-            icon.sprite = defaultIcon;
-            player.curShield = null;
-            itemObject.GetComponent<WeaponController>().isPlayer = false;
-            itemObject.GetComponent<WeaponController>().isAI = false;
-            itemObject.GetComponent<WeaponController>().isItem = true;
-            itemObject.GetComponent<Collider>().isTrigger = true;
+            player.currentHelmet = null;
+            for (int i = 0; i < player.helmet.Length; i++)
+            {
+                player.helmet[i].SetActive(false);
+            }
+        }
+        else if (thisArmor.armorType == Armor.ArmorType.Chestplate)
+        {
+            player.currentChestplate = null;
+            for (int i = 0; i < player.chestplate.Length; i++)
+            {
+                player.chestplate[i].SetActive(false);
+            }
+        }
+        else if (thisArmor.armorType == Armor.ArmorType.Leggings)
+        {
+            player.currentLeggings = null;
+            for (int i = 0; i < player.leggings.Length; i++)
+            {
+                player.leggings[i].SetActive(false);
+            }
+        }
+        else if (thisArmor.armorType == Armor.ArmorType.Boots)
+        {
+            player.currentBoots = null;
+            for (int i = 0; i < player.boots.Length; i++)
+            {
+                player.boots[i].SetActive(false);
+                player.boots2[i].SetActive(false);
+            }
         }
     }
 }
+
+

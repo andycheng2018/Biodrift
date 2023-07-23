@@ -1,149 +1,209 @@
+using System;
 using Unity.Netcode;
 using UnityEngine;
 
 public class WeaponController : NetworkBehaviour
 {
     [Header("Weapon Settings")]
-    public AudioSource audioSource;
     public AudioClip attackSound;
     public AudioClip damageSound;
     public GameObject hitEffect;
+    public ParticleSystem weaponTrail;
+    public ResourceType resourceType;
+    public enum ResourceType { Wood, Rock, Flesh };
     public Rarity rarity;
-    public enum Rarity { Common, Uncommon, Rare, Legendary, Mythical };
-    public enum Types { Melee, Shield, Ranged, Magic, Projectile };
+    public enum Rarity { Wood, Stone, Gold, Iron, Sapphire };
     public Types type;
-    [Range(1, 150)] public float weaponDamage;
-    [Range(0.1f, 1f)] public float weaponDropChance = 0.5f;
+    public enum Types { Pickaxe, Axe, Sword, Shield, Bow };
+    [Range(0, 50)] public float weaponDamage;
     [Range(0, 1)] public float weaponDurability = 1;
-    public Creature creature;
-    public bool isPlayer;
-    public bool isAI;
-    public bool isItem;
+    [HideInInspector] public Monster monster;
+    [SerializeField] public NetworkVariable<bool> isPlayer = new NetworkVariable<bool>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    [SerializeField] public NetworkVariable<bool> isAI = new NetworkVariable<bool>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
     [Header("Ranged Weapon Settings")]
-    public GameObject spear;
-    [Range(1, 150)] public float throwForce;
-    [Range(0, 5)] public float accuracy;
+    public GameObject arrow;
+    [Range(0, 50)] public float throwForce;
+    [Range(0, 10)] public float accuracy;
+
+    [HideInInspector] public GameObject target;
+    [HideInInspector] public float weaponDropChance;
+    private AudioSource audioSource;
+
+    private void Awake()
+    {
+        audioSource = GetComponent<AudioSource>();
+
+        if (rarity == Rarity.Wood)
+        {
+            weaponDropChance = 0.45f;
+        }
+        else if (rarity == Rarity.Stone)
+        {
+            weaponDropChance = 0.35f;
+        }
+        else if (rarity == Rarity.Gold)
+        {
+            weaponDropChance = 0.25f;
+        }
+        else if (rarity == Rarity.Iron)
+        {
+            weaponDropChance = 0.15f;
+        }
+        else if (rarity == Rarity.Sapphire)
+        {
+            weaponDropChance = 0.05f;
+        }
+    }
+
+    private void Update()
+    {
+        if (!IsServer) { return; }
+        if (target == null) { return; }
+
+        transform.position = target.transform.position;
+        transform.rotation = target.transform.rotation;
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void ChangeParentServerRpc(int num, NetworkObjectReference networkObjectReference)
+    {
+        if (!IsServer) { return; }
+        ChangeParentClientRpc(num, networkObjectReference);
+    }
+
+    [ClientRpc]
+    public void ChangeParentClientRpc(int num, NetworkObjectReference networkObjectReference)
+    {
+        networkObjectReference.TryGet(out NetworkObject networkObject);
+        Player player = networkObject.GetComponent<Player>();
+
+        if (num == 1)
+        {
+            target = player.hand.gameObject;
+        }
+        else if (num == 2)
+        {
+            target = player.offhand.gameObject;
+        }
+        else if (num == 3)
+        {
+            target = null;
+        }
+    }
+
+
+    [ServerRpc(RequireOwnership = false)]
+    public void setWeaponServerRpc(bool isPlayer, bool isAI)
+    {
+        if (!IsServer) { return; }
+        setWeaponClientRpc(isPlayer, isAI);
+    }
+
+    [ClientRpc]
+    public void setWeaponClientRpc(bool isPlayer, bool isAI)
+    {
+        this.isPlayer.Value = isPlayer;
+        this.isAI.Value = isAI;
+    }
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!IsOwner) { return; }
-
         //AI
-        if (isAI && creature != null)
+        if (isAI.Value && monster != null)
         {
-            if (other.tag == "Player" && (creature.classes == Creature.Class.Warrior || creature.classes == Creature.Class.Guard))
+            if (other.tag == "Player")
             {
+                other.gameObject.SendMessageUpwards("ChangeHealth", -weaponDamage, SendMessageOptions.DontRequireReceiver);
+                var player = other.GetComponent<Player>();
                 GameObject particle = Instantiate(hitEffect, transform.position, transform.rotation);
                 Destroy(particle, 2);
                 audioSource.PlayOneShot(damageSound);
-                other.gameObject.SendMessageUpwards("ChangeHealth", -weaponDamage, SendMessageOptions.DontRequireReceiver);
             }
-
-            if ((other.tag == "Vegetation" || other.tag == "Structure") && other.GetComponent<Resources>() != null)
-            {
-                other.gameObject.SendMessageUpwards("ChangeHealth", -weaponDamage, SendMessageOptions.DontRequireReceiver);
-                var resource = other.GetComponent<Resources>();
-                GameObject particle = Instantiate(resource.hitEffect, transform.position, transform.rotation);
-                Destroy(particle, 2);
-                audioSource.PlayOneShot(resource.hitSound);
-            }
-        }  
+        }
 
         //Player
-        if (isPlayer)
+        if (isPlayer.Value)
         {
-            if (other.tag == "Enemy" || other.tag == "Villager" || other.tag == "Player")
+            if (other.tag == "Monster")
             {
-                if (type == Types.Projectile)
+                if (gameObject.tag == "Projectile")
                 {
                     GameObject particle = Instantiate(hitEffect, transform.position, transform.rotation);
                     Destroy(particle, 2);
                     audioSource.PlayOneShot(damageSound);
                     other.gameObject.SendMessageUpwards("ChangeHealth", -weaponDamage, SendMessageOptions.DontRequireReceiver);
-
-                    if (other.tag == "Villager")
-                    {
-                        Collider[] hitColliders = Physics.OverlapSphere(transform.position, 300);
-                        foreach (var hitCollider in hitColliders)
-                        {
-                            if (hitCollider.GetComponent<Creature>() != null)
-                            {
-                                hitCollider.GetComponent<Creature>().isProvoked = true;
-                            }
-                        }
-                    }
                 }
                 else
                 {
                     GameObject particle = Instantiate(hitEffect, transform.position, transform.rotation);
                     Destroy(particle, 2);
                     audioSource.PlayOneShot(damageSound);
-                    other.gameObject.SendMessageUpwards("ChangeHealth", -weaponDamage, SendMessageOptions.DontRequireReceiver);
-                    if (type == Types.Melee || type == Types.Shield)
+                    if (resourceType == ResourceType.Flesh)
                     {
-                        CinemachineShake.Instance.ShakeCamera(1f, 0.1f);
+                        other.gameObject.SendMessageUpwards("ChangeHealth", -weaponDamage, SendMessageOptions.DontRequireReceiver);
+                    } else
+                    {
+                        other.gameObject.SendMessageUpwards("ChangeHealth", -weaponDamage/2, SendMessageOptions.DontRequireReceiver);
                     }
 
-                    if (other.tag == "Villager")
+                    if (type == Types.Sword || type == Types.Shield)
                     {
-                        Collider[] hitColliders = Physics.OverlapSphere(transform.position, 300);
-                        foreach (var hitCollider in hitColliders)
-                        {
-                            if (hitCollider.GetComponent<Creature>() != null)
-                            {
-                                hitCollider.GetComponent<Creature>().isProvoked = true;
-                            }
-                        }
+                        CinemachineShake.Instance.ShakeCamera(1f, 0.1f);
                     }
                     CheckDurability();
                 }
             }
 
-            if ((other.tag == "Vegetation" || other.tag == "Structure") && other.GetComponent<Resources>() != null)
+            if (other.GetComponent<Resource>() != null)
             {
-                other.gameObject.SendMessageUpwards("ChangeHealth", -weaponDamage, SendMessageOptions.DontRequireReceiver);
+                if (((int)rarity >= (int)other.GetComponent<Resource>().lowestRarity) && ((int)resourceType == (int)other.GetComponent<Resource>().resourceType))
+                {
+                    other.gameObject.SendMessageUpwards("ChangeHealth", -weaponDamage, SendMessageOptions.DontRequireReceiver);
+                }
                 CinemachineShake.Instance.ShakeCamera(1f, 0.1f);
-                var resource = other.GetComponent<Resources>();
+                var resource = other.GetComponent<Resource>();
                 GameObject particle = Instantiate(resource.hitEffect, transform.position, transform.rotation);
                 Destroy(particle, 2);
                 audioSource.PlayOneShot(resource.hitSound);
                 CheckDurability();
+                gameObject.GetComponent<Collider>().enabled = false;
             }
 
-            if (other.tag == "Chest")
+            //other.gameObject.GetComponent<NetworkObject>() != NetworkManager.Singleton.ConnectedClients[NetworkManager.Singleton.LocalClientId].PlayerObject
+            if (other.tag == "Player")
             {
+                if (other.GetComponent<Player>().playerCamera == isActiveAndEnabled) { return; }
                 other.gameObject.SendMessageUpwards("ChangeHealth", -weaponDamage, SendMessageOptions.DontRequireReceiver);
                 CinemachineShake.Instance.ShakeCamera(1f, 0.1f);
-                var chest = other.GetComponent<Chest>();
-                GameObject particle = Instantiate(chest.hitEffect, transform.position, transform.rotation);
+                GameObject particle = Instantiate(hitEffect, transform.position, transform.rotation);
                 Destroy(particle, 2);
-                if (chest.hitChest != null)
-                    audioSource.PlayOneShot(chest.hitChest);
+                audioSource.PlayOneShot(damageSound);
                 CheckDurability();
+                gameObject.GetComponent<Collider>().enabled = false;
             }
         }
     }
 
     public void CheckDurability()
     {
-        if (rarity == Rarity.Common)
+        if (rarity == Rarity.Wood)
         {
             weaponDurability -= 0.05f; //20 times
         }
-        else if (rarity == Rarity.Uncommon)
+        else if (rarity == Rarity.Stone)
         {
             weaponDurability -= 0.025f; //40 times
         }
-        else if (rarity == Rarity.Rare)
+        else if (rarity == Rarity.Gold)
         {
             weaponDurability -= 0.016f; //60 times
         }
-        else if (rarity == Rarity.Legendary)
+        else if (rarity == Rarity.Iron)
         {
             weaponDurability -= 0.01f; //100 times
         }
-        else if (rarity == Rarity.Mythical)
+        else if (rarity == Rarity.Sapphire)
         {
             weaponDurability -= 0.005f; //200 times
         }

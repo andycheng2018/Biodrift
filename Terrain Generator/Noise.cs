@@ -1,19 +1,15 @@
-using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public static class Noise
 {
-
     public static float[,] GenerateNoiseMap(int seed, int mapWidth, int mapHeight, float scale, int octaves, float persistance, float lacunarity, Vector2 offset)
     {
-
         System.Random prng = new System.Random(seed);
 
         float[,] noiseMap = new float[mapWidth, mapHeight];
 
-        UnityEngine.Vector2[] octaveOffsets = new UnityEngine.Vector2[octaves];
+        Vector2[] octaveOffsets = new Vector2[octaves];
 
         float maxPossibleHeight = 0;
         float amplitude = 1;
@@ -23,12 +19,11 @@ public static class Noise
         {
             float offsetX = prng.Next(-100000, 100000) + offset.x;
             float offsetY = prng.Next(-100000, 100000) - offset.y;
-            octaveOffsets[i] = new UnityEngine.Vector2(offsetX, offsetY);
+            octaveOffsets[i] = new Vector2(offsetX, offsetY);
 
             maxPossibleHeight += amplitude;
             amplitude *= persistance;
         }
-
 
         if (scale <= 0)
         {
@@ -45,23 +40,20 @@ public static class Noise
         {
             for (int x = 0; x < mapWidth; x++)
             {
-
                 amplitude = 1;
                 frequency = 1;
                 float noiseHeight = 0;
 
                 for (int i = 0; i < octaves; i++)
                 {
-
                     float sampleX = (x - halfWidth + octaveOffsets[i].x) / scale * frequency;
                     float sampleY = (y - halfHeight + octaveOffsets[i].y) / scale * frequency;
 
                     float perlinValue = Mathf.PerlinNoise(sampleX, sampleY) * 2f - 1f;
                     noiseHeight += perlinValue * amplitude;
 
-                    amplitude *= persistance; //persistance is in range (0,1) so amplitude decreases
-                    frequency *= lacunarity; // frequency increases
-
+                    amplitude *= persistance;
+                    frequency *= lacunarity;
                 }
 
                 if (noiseHeight > maxLocalNoiseHeight)
@@ -74,7 +66,6 @@ public static class Noise
                 }
 
                 noiseMap[x, y] = noiseHeight;
-
             }
         }
 
@@ -88,31 +79,29 @@ public static class Noise
         }
 
         return noiseMap;
-
     }
 
-
-    public static List<Vector2> GeneratePoissonDiskSampling(int seed, int mapWidth, int mapHeight, int newPointsCount, float minDistance)
+    public static List<Vector2> GeneratePoissonDiskSampling(int seed, int mapWidth, int mapHeight, int newPointsCount, float minDistance, bool isVegetation)
     {
-
         if (minDistance <= 0)
-        { // Empty list, no tree for this map
+        {
             return new List<Vector2>();
         }
 
         System.Random prng = new System.Random(seed);
 
+        if (!isVegetation)
+        {
+            prng = new System.Random(seed + 1);
+        }
 
         float cellSize = minDistance / Mathf.Sqrt(2f);
 
-        PoissonGrid grid = new PoissonGrid((int)Mathf.Ceil(mapWidth / cellSize) + 1, (int)Mathf.Ceil(mapHeight / cellSize) + 1, cellSize); // + 1 to have correct grid size
+        PoissonGrid grid = new PoissonGrid((int)Mathf.Ceil(mapWidth / cellSize) + 1, (int)Mathf.Ceil(mapHeight / cellSize) + 1, cellSize);
 
         List<Vector2> samplePoints = new List<Vector2>();
-
-        // Used as a random queue
         List<Vector2> processList = new List<Vector2>();
 
-        // Generate first point randomly
         float firstPointX = ((float)prng.NextDouble()) * mapWidth;
         float firstPointY = ((float)prng.NextDouble()) * mapHeight;
         Vector2 firstPoint = new Vector2(firstPointX, firstPointY);
@@ -121,10 +110,8 @@ public static class Noise
         samplePoints.Add(firstPoint);
         grid.Add(firstPoint);
 
-        // List not empty
         while (processList.Count != 0)
         {
-
             int indexPop = prng.Next(0, processList.Count);
 
             Vector2 point = processList[indexPop];
@@ -132,7 +119,6 @@ public static class Noise
 
             for (int i = 0; i < newPointsCount; i++)
             {
-
                 Vector2 newPoint = GenerateRandomPointAround(point, minDistance, prng);
 
                 if (IsInside(mapWidth, mapHeight, newPoint) && !grid.IsNeighbourClose(newPoint, minDistance))
@@ -141,17 +127,11 @@ public static class Noise
                     samplePoints.Add(newPoint);
                     grid.Add(newPoint);
                 }
-
             }
 
         }
 
         return samplePoints;
-    }
-
-    private static bool IsCorrectBiome(Vector2 newPoint, int width, Color[] biomeMap, Color currentBiome)
-    {
-        return biomeMap[(int)newPoint.y * width + (int)newPoint.x].Equals(currentBiome);
     }
 
     private static bool IsInside(float mapWidth, float mapHeight, Vector2 newPoint)
@@ -161,7 +141,6 @@ public static class Noise
 
     private static Vector2 GenerateRandomPointAround(Vector2 point, float minDistance, System.Random prng)
     {
-
         float r1 = (float)prng.NextDouble();
         float r2 = (float)prng.NextDouble();
 
@@ -174,12 +153,10 @@ public static class Noise
 
         return new Vector2(newX, newY);
     }
-
 }
 
 public class PoissonGrid
 {
-
     public int gridWidth;
     public int gridHeight;
 
@@ -211,11 +188,8 @@ public class PoissonGrid
 
     public bool IsNeighbourClose(Vector2 newPoint, float minDistance)
     {
-
-        // Retrieve cell coordinates in array
         Vector2Int cellCoords = GetCellCoordinates(newPoint);
 
-        // Loop through neighbours cell
         int minX = Mathf.Max(0, cellCoords.x - 2);
         int maxX = Mathf.Min(gridWidth, cellCoords.x + 3);
 
@@ -228,8 +202,7 @@ public class PoissonGrid
             {
 
                 if (grid[x, y] != null)
-                { //There is something to check
-
+                {
                     if (grid[x, y].Distance(newPoint) < minDistance)
                     {
                         return true;

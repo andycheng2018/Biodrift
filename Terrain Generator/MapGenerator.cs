@@ -12,10 +12,11 @@ public class MapGenerator : MonoBehaviour
     public enum DrawMode { Default, HeightMap, MoistureMap, BiomeColorMap, Mesh, VegetationMap };
     public GameObject mesh;
 	public GameObject water;
-	public Material terrain;
+    public Material terrain;
 	public Material grass;
     public Material skybox;
     public GameObject waterObject;
+    public GameObject vegetationHolder;
 	public Vector2 offset;
 	[Range(0, 6)]
 	public int editorPreviewLOD;
@@ -27,9 +28,10 @@ public class MapGenerator : MonoBehaviour
 	public int octaves;
 	public float lacunarity;
 	public int scale;
-	public const int mapChunkSize = 241;
-    public int newPointsCount;
     public int seed;
+    public int difficulty;
+    public bool useFalloff;
+    public bool useFlatShading;
     public bool isMenu;
 
     [Header("Day Night Cycle")]
@@ -37,33 +39,46 @@ public class MapGenerator : MonoBehaviour
     public float dayNightMultiplier;
     [Range(0, 1)]
     public float time = 0;
-    private bool day;
+    private bool day = true;
     private bool night;
 	private int dayNumber;
+    private Player player;
 
-    [Header("Music Player")]
-    public AudioSource audioSource;
-    public AudioClip[] music;
+    [Header("Spawn Monsters")]
+    [Range(1, 1000)] public int monsterSpawnSize;
+    [Range(1, 20)] public float spawnTime;
+    [Range(1, 100)] public int spawnLimit;
+    public GameObject[] monsters;
+    private int monsterCount;
 
-	[Header("Biome Generation Settings")]
-    public Difficulty difficulty;
-    public enum Difficulty { Easy, Normal, Hardcore };
+    [Header("Biome Generation Settings")]
     public TerrainType[] regions;
+    float[,] falloffMap;
+    static MapGenerator instance;
+    private int newPointsCount = 20;
 
     Queue<MapThreadInfo<MapData>> mapDataThreadInfoQueue = new Queue<MapThreadInfo<MapData>>();
 	Queue<MapThreadInfo<MeshData>> meshDataThreadInfoQueue = new Queue<MapThreadInfo<MeshData>>();
 
     public void Start()
 	{
-        if (!isMenu)
-		{
-            mesh.SetActive(false);
-			water.SetActive(false);
-        }
         terrain.mainTexture = TextureGenerator.TextureFromColorMap(GenerateMapData(Vector2.zero).biomeMap, mapChunkSize, mapChunkSize);
-        audioSource.clip = music[Random.Range(0, music.Length)];
-		audioSource.Play();
-	}
+
+        if (!isMenu)
+        {
+            player = Player.instance;
+            mesh.SetActive(false);
+            water.SetActive(false);
+
+            if (monsters.Length > 0)
+            {
+                InvokeRepeating("SpawnMonsters", spawnTime, spawnTime);
+            }
+        } else
+        {
+            //GenerateMap();
+        }
+    }
 
     private void Update()
 	{
@@ -76,22 +91,36 @@ public class MapGenerator : MonoBehaviour
 			}
 		}
 
-		if (meshDataThreadInfoQueue.Count > 0)
-		{
-			for (int i = 0; i < meshDataThreadInfoQueue.Count; i++)
-			{
-				MapThreadInfo<MeshData> threadInfo = meshDataThreadInfoQueue.Dequeue();
-				threadInfo.callback(threadInfo.parameter);
-			}
-		}
-
-		if (!audioSource.isPlaying)
-		{
-			audioSource.clip = music[Random.Range(0, music.Length)];
-			audioSource.Play();
-		}
+        if (meshDataThreadInfoQueue.Count > 0)
+        {
+            for (int i = 0; i < meshDataThreadInfoQueue.Count; i++)
+            {
+                MapThreadInfo<MeshData> threadInfo = meshDataThreadInfoQueue.Dequeue();
+                threadInfo.callback(threadInfo.parameter);
+            }
+        }
 
         DayNightCycle();
+    }
+
+    public static int mapChunkSize
+    {
+        get
+        {
+            if (instance == null)
+            {
+                instance = FindObjectOfType<MapGenerator>();
+            }
+
+            if (instance.useFlatShading)
+            {
+                return 97;
+            }
+            else
+            {
+                return 241;
+            }
+        }
     }
 
     public void DrawMapInEditor()
@@ -116,7 +145,7 @@ public class MapGenerator : MonoBehaviour
         }
         else if (drawMode == DrawMode.Mesh)
         {
-            mesh.GetComponent<MeshFilter>().sharedMesh = MeshGenerator.GenerateTerrainMesh(GenerateMapData(Vector2.zero).heightMap, meshHeightMultiplier, meshHeightCurve, editorPreviewLOD).CreateMesh();
+            mesh.GetComponent<MeshFilter>().sharedMesh = MeshGenerator.GenerateTerrainMesh(GenerateMapData(Vector2.zero).heightMap, meshHeightMultiplier, meshHeightCurve, editorPreviewLOD, useFlatShading).CreateMesh();
             DestroyImmediate(mesh.GetComponent<MeshCollider>());
             mesh.AddComponent<MeshCollider>();
         }
@@ -128,17 +157,14 @@ public class MapGenerator : MonoBehaviour
 
     public void GenerateMap()
 	{
-        if (isMenu)
-        {
-            difficulty = (Difficulty)FindObjectOfType<StoreVariables>().difficultyInt;
-        }
         terrain.mainTexture = TextureGenerator.TextureFromColorMap(GenerateMapData(Vector2.zero).biomeMap, mapChunkSize, mapChunkSize);
-        mesh.GetComponent<MeshFilter>().sharedMesh = MeshGenerator.GenerateTerrainMesh(GenerateMapData(Vector2.zero).heightMap, meshHeightMultiplier, meshHeightCurve, editorPreviewLOD).CreateMesh();
+        grass.color = TextureGenerator.TextureFromColorMap(GenerateMapData(Vector2.zero).biomeMap, mapChunkSize, mapChunkSize).GetPixel(MapGenerator.mapChunkSize, MapGenerator.mapChunkSize);
+        mesh.GetComponent<MeshFilter>().sharedMesh = MeshGenerator.GenerateTerrainMesh(GenerateMapData(Vector2.zero).heightMap, meshHeightMultiplier, meshHeightCurve, editorPreviewLOD, useFlatShading).CreateMesh();
         DestroyImmediate(mesh.GetComponent<MeshCollider>());
 		mesh.AddComponent<MeshCollider>();
 		mesh.GetComponent<MeshRenderer>().materials = new Material[] { terrain, grass };
 		mesh.transform.localScale = Vector3.one * scale;
-		water.transform.position = new Vector3(0, 22, 0);
+        water.transform.position = Vector3.zero;
         ClearObjects();
         CreateVegetation();
         CreateStructure();
@@ -155,16 +181,19 @@ public class MapGenerator : MonoBehaviour
 
         foreach (PoissonSampleData sample in mapData.poissonDiskSamples)
         {
+            if (sample.vegetations.Length <= 0) { return; }
             float posX = (topLeftX + sample.position.x) * scale;
             float treeHeight = mapData.heightCurve.Evaluate(mapData.heightMap[(int)sample.position.x, (int)sample.position.y]) * mapData.heightMultiplier * scale;
             float posZ = (topLeftZ - sample.position.y) * scale;
             var vegetation = sample.vegetations[Random.Range(0, sample.vegetations.Length)];
-            float randomScale = Random.Range(vegetation.scale.x, vegetation.scale.y);
-
+            if (vegetation.vegetation == null) { break; }
             GameObject veg = Instantiate(vegetation.vegetation, mesh.transform.position + new Vector3(posX, treeHeight, posZ), Quaternion.identity, mesh.transform);
             veg.transform.eulerAngles = new Vector3(Random.Range(-10, 10), Random.Range(-180, 180f), Random.Range(-10, 10));
-            veg.transform.localScale = new Vector3(randomScale, randomScale, randomScale);
             veg.transform.position += new Vector3(0, vegetation.addHeight, 0);
+            if (veg.GetComponent<Rigidbody>() != null)
+            {
+                veg.GetComponent<Rigidbody>().isKinematic = true;
+            }
         }
     }
 
@@ -176,24 +205,24 @@ public class MapGenerator : MonoBehaviour
 
         float topLeftX = (width - 1) / -2f;
         float topLeftZ = (height - 1) / 2f;
-        int randStructure = Random.Range(0, mapData.poissonDiskSamples[Random.Range(0, mapData.poissonDiskSamples.Count)].structures.Length);
-        float randPercent = Random.value;
+        if (mapData.poissonDiskSamples2.Count <= 0) { return; }
+        int randStructure = Random.Range(0, mapData.poissonDiskSamples2[Random.Range(0, mapData.poissonDiskSamples2.Count)].structures.Length);
 
-        foreach (PoissonSampleData sample in mapData.poissonDiskSamples)
+        foreach (PoissonSampleData sample in mapData.poissonDiskSamples2)
         {
-            if (randPercent > 1 - sample.structures[randStructure].structureSpawnPercent)
+            if (sample.structures.Length <= 0) { return; }
+            float posX = (topLeftX + sample.position.x) * scale;
+            float objectHeight = mapData.heightCurve.Evaluate(mapData.heightMap[(int)sample.position.x, (int)sample.position.y]) * mapData.heightMultiplier * scale;
+            float posZ = (topLeftZ - sample.position.y) * scale;
+            var structure = sample.structures[randStructure];
+            var prop = structure.props[Random.Range(0, structure.props.Length)];
+            if (prop.prop == null) { break; }
+            GameObject thisProp = Instantiate(prop.prop, mesh.transform.position + new Vector3(posX, objectHeight, posZ), Quaternion.identity, mesh.transform);
+            thisProp.transform.eulerAngles = new Vector3(0, Random.Range(-180, 180f), 0);
+            thisProp.transform.position += new Vector3(0, prop.addHeight, 0);
+            if (thisProp.GetComponent<Rigidbody>() != null)
             {
-                float posX = (topLeftX + sample.position.x) * scale;
-                float objectHeight = mapData.heightCurve.Evaluate(mapData.heightMap[(int)sample.position.x, (int)sample.position.y]) * mapData.heightMultiplier * scale;
-                float posZ = (topLeftZ - sample.position.y) * scale;
-                var structure = sample.structures[randStructure];
-                var prop = structure.props[Random.Range(0, structure.props.Length)];
-                float randomScale = Random.Range(prop.scale.x, prop.scale.y);
-
-                GameObject thisStructure = Instantiate(prop.prop, mesh.transform.position + new Vector3(posX, objectHeight, posZ), Quaternion.identity, mesh.transform);
-                thisStructure.transform.eulerAngles = new Vector3(0, Random.Range(-180, 180f), 0);
-                thisStructure.transform.localScale = new Vector3(randomScale, randomScale, randomScale);
-                thisStructure.transform.position += new Vector3(0, prop.addHeight, 0);
+                thisProp.GetComponent<Rigidbody>().isKinematic = true;
             }
         }
     }
@@ -231,18 +260,35 @@ public class MapGenerator : MonoBehaviour
             time -= Time.deltaTime * dayNightMultiplier;
         }
 
-        sun.transform.localRotation = Quaternion.Euler(new Vector3((time * 360f) - 90f, 170f, 0));
+        sun.transform.localRotation = Quaternion.Euler(new Vector3(time * 360f - 90, 180f, 0));
 
         skybox.SetFloat("_CubemapTransition", time);
         skybox.SetFloat("_Exposure", 2 - time * 2);
+    }
+
+    public void SpawnMonsters()
+    {
+        if ((monsterCount < spawnLimit))
+        {
+            RaycastHit hit;
+            for (int i = 0; i < monsters.Length; i++)
+            {
+                if (Physics.Raycast(new Vector3(Random.Range(-monsterSpawnSize, monsterSpawnSize), 500, Random.Range(-monsterSpawnSize, monsterSpawnSize)) + Player.instance.transform.position, Vector3.down, out hit, 500) && hit.collider.tag == "Untagged")
+                {
+                    Instantiate(monsters[Random.Range(0, monsters.Length)], hit.point, Quaternion.identity);
+                    monsterCount += 1;
+                    break;
+                }
+            }
+        }
     }
 
 	private IEnumerator UpdateDay()
 	{
 		yield return new WaitForEndOfFrame();
         dayNumber++;
-        if (Player.playerInstance != null)
-            Player.playerInstance.dayText.text = "Day " + dayNumber.ToString();
+        if (player != null)
+            player.dayText.text = "Day " + dayNumber.ToString();
     }
 
     //Multithreading
@@ -275,18 +321,19 @@ public class MapGenerator : MonoBehaviour
 
 	void MeshDataThread(MapData mapData, int lod, Action<MeshData> callback)
 	{
-		MeshData meshData = MeshGenerator.GenerateTerrainMesh(mapData.heightMap, meshHeightMultiplier, meshHeightCurve, lod);
+		MeshData meshData = MeshGenerator.GenerateTerrainMesh(mapData.heightMap, meshHeightMultiplier, meshHeightCurve, lod, useFlatShading);
 		lock (meshDataThreadInfoQueue)
 		{
 			meshDataThreadInfoQueue.Enqueue(new MapThreadInfo<MeshData>(callback, meshData));
 		}
 	}
 
-	MapData GenerateMapData(Vector2 centre)
+	public MapData GenerateMapData(Vector2 centre)
 	{
+        falloffMap = FallOffGenerator.GenerateFalloffMap(mapChunkSize);
         float[,] heightMap = Noise.GenerateNoiseMap(seed, mapChunkSize, mapChunkSize, noiseScale, octaves, persistance, lacunarity, centre + offset);
 
-        float[,] moistureMap = Noise.GenerateNoiseMap(seed * 2, mapChunkSize, mapChunkSize, noiseScale, octaves, persistance, lacunarity, centre + offset);
+        float[,] moistureMap = Noise.GenerateNoiseMap(seed + 1, mapChunkSize, mapChunkSize, noiseScale, octaves, persistance, lacunarity, centre + offset);
 
         Color[] biomeMap = new Color[mapChunkSize * mapChunkSize];
 
@@ -294,7 +341,10 @@ public class MapGenerator : MonoBehaviour
         {
             for (int x = 0; x < mapChunkSize; x++)
             {
-
+                if (useFalloff)
+                {
+                    heightMap[x, y] = Mathf.Clamp01(heightMap[x, y] - falloffMap[x, y]);
+                }
                 float currentHeight = heightMap[x, y];
                 float currentMoisture = moistureMap[x, y];
 
@@ -310,10 +360,12 @@ public class MapGenerator : MonoBehaviour
         }
 
         List<PoissonSampleData> poissonDiskSamples = new List<PoissonSampleData>();
+        List<PoissonSampleData> poissonDiskSamples2 = new List<PoissonSampleData>();
 
         for (int i = 0; i < regions.Length; i++)
         {
-            List<Vector2> poissonDiskSamplesRegion = Noise.GeneratePoissonDiskSampling(seed, mapChunkSize, mapChunkSize, newPointsCount, regions[i].vegMinDistance);
+            List<Vector2> poissonDiskSamplesRegion = Noise.GeneratePoissonDiskSampling(seed, mapChunkSize, mapChunkSize, newPointsCount, regions[i].vegMinDistance, true);
+            List<Vector2> poissonDiskSamplesRegion2 = Noise.GeneratePoissonDiskSampling(seed, mapChunkSize, mapChunkSize, newPointsCount, regions[i].structMinDistance, false);
 
             for (int k = 0; k < poissonDiskSamplesRegion.Count; k++)
             {
@@ -325,9 +377,20 @@ public class MapGenerator : MonoBehaviour
                     poissonDiskSamples.Add(new PoissonSampleData(poissonDiskSamplesRegion[k], regions[i].vegetations, regions[i].structures));
                 }
             }
+
+            for (int k = 0; k < poissonDiskSamplesRegion2.Count; k++)
+            {
+
+                Color biomeColor = biomeMap[(int)poissonDiskSamplesRegion2[k].y * mapChunkSize + (int)poissonDiskSamplesRegion2[k].x];
+
+                if (biomeColor.Equals(regions[i].color))
+                {
+                    poissonDiskSamples2.Add(new PoissonSampleData(poissonDiskSamplesRegion2[k], regions[i].vegetations, regions[i].structures));
+                }
+            }
         }
 
-        return new MapData(heightMap, moistureMap, biomeMap, poissonDiskSamples, meshHeightCurve, meshHeightMultiplier);
+        return new MapData(heightMap, moistureMap, biomeMap, poissonDiskSamples, poissonDiskSamples2, meshHeightCurve, meshHeightMultiplier);
     }
 
 	struct MapThreadInfo<T>
@@ -347,9 +410,7 @@ public class MapGenerator : MonoBehaviour
 [System.Serializable]
 public struct Vegetation
 {
-	public String vegetationName;
 	public GameObject vegetation;
-	public Vector2 scale;
 	public float addHeight;
 }
 
@@ -357,16 +418,13 @@ public struct Vegetation
 public struct Structure
 {
 	public String structureName;
-	public float structureSpawnPercent;
 	public Props[] props;
 }
 
 [System.Serializable]
 public struct Props
 {
-	public String propName;
 	public GameObject prop;
-	public Vector2 scale;
     public float addHeight;
 }
 
@@ -389,15 +447,17 @@ public struct MapData
     public readonly float[,] moistureMap;
     public readonly Color[] biomeMap;
     public readonly List<PoissonSampleData> poissonDiskSamples;
+    public readonly List<PoissonSampleData> poissonDiskSamples2;
     public readonly AnimationCurve heightCurve;
     public readonly float heightMultiplier;
 
-    public MapData(float[,] heightMap, float[,] moistureMap, Color[] biomeMap, List<PoissonSampleData> poissonDiskSamples, AnimationCurve heightCurve, float heightMultiplier)
+    public MapData(float[,] heightMap, float[,] moistureMap, Color[] biomeMap, List<PoissonSampleData> poissonDiskSamples, List<PoissonSampleData> poissonDiskSamples2, AnimationCurve heightCurve, float heightMultiplier)
     {
         this.heightMap = heightMap;
         this.moistureMap = moistureMap;
         this.biomeMap = biomeMap;
         this.poissonDiskSamples = poissonDiskSamples;
+        this.poissonDiskSamples2 = poissonDiskSamples2;
         this.heightCurve = heightCurve;
         this.heightMultiplier = heightMultiplier;
     }
@@ -416,4 +476,3 @@ public struct PoissonSampleData
         this.structures = structures;
     }
 }
-

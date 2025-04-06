@@ -1,22 +1,22 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Game Banner" width="800"/>
+  <img src="assets/biodrift_banner.png" alt="Biodrift Banner" width="800"/>
 </p>
 
-<h1 align="center">🎮 MyCoolGame</h1>
+<h1 align="center">🌿 Biodrift-V1.0</h1>
 
 <p align="center">
-  A fast-paced 2D action game where you blast through pixelated enemies and dodge chaos at lightning speed. Built with ❤️ using Godot.
+  An action-packed adventure where nature and technology collide. Navigate through treacherous terrains and overcome challenges in this unique action game.
 </p>
 
 <p align="center">
-  <a href="https://github.com/yourname/yourgame/actions">
-    <img src="https://img.shields.io/github/actions/workflow/status/yourname/yourgame/build.yml?label=build&style=flat-square" alt="Build Status">
+  <a href="https://github.com/yourusername/biodrift/actions">
+    <img src="https://img.shields.io/github/actions/workflow/status/yourusername/biodrift/build.yml?label=build&style=flat-square" alt="Build Status">
   </a>
   <a href="LICENSE">
-    <img src="https://img.shields.io/github/license/yourname/yourgame?style=flat-square" alt="License">
+    <img src="https://img.shields.io/github/license/yourusername/biodrift?style=flat-square" alt="License">
   </a>
-  <a href="https://github.com/yourname/yourgame/stargazers">
-    <img src="https://img.shields.io/github/stars/yourname/yourgame?style=flat-square" alt="Stars">
+  <a href="https://github.com/yourusername/biodrift/stargazers">
+    <img src="https://img.shields.io/github/stars/yourusername/biodrift?style=flat-square" alt="Stars">
   </a>
 </p>
 
@@ -24,67 +24,59 @@
 
 ## 🎥 Preview
 
-[![Watch the demo](https://img.youtube.com/vi/YOUTUBE_ID_HERE/0.jpg)](https://youtu.be/YOUTUBE_ID_HERE)
+[![Watch the demo](https://img.youtube.com/vi/YOUR_YOUTUBE_VIDEO_ID/0.jpg)](https://youtu.be/YOUR_YOUTUBE_VIDEO_ID)
 
 ---
 
 ## 📸 Screenshots
 
 <p float="left">
-  <img src="screenshots/screen1.png" width="48%" />
-  <img src="screenshots/screen2.png" width="48%" />
+  <img src="screenshots/screenshot1.png" width="48%" />
+  <img src="screenshots/screenshot2.png" width="48%" />
 </p>
 
 ---
 
 ## 🚀 Features
 
-- ⚔️ Tight, responsive combat
-- 🎨 Hand-crafted pixel art
-- 🧠 Simple but smart enemy AI
-- 🎮 Controller support
-- 🔊 Custom soundtrack
+- 🌍 **Dynamic Environments**: Experience ever-changing landscapes that challenge your adaptability.
+- 🛠 **Innovative Mechanics**: Utilize a blend of natural abilities and technological tools to progress.
+- 🎶 **Immersive Soundtrack**: Engage with a captivating soundtrack that complements the game's atmosphere.
 
 ---
 
 ## ⌨️ Controls
 
 | Action     | Key             |
-|------------|------------------|
-| Move       | WASD / Arrows    |
-| Shoot      | Space            |
-| Dash       | Shift            |
-| Pause/Menu | Esc              |
+|------------|-----------------|
+| Move       | WASD / Arrows   |
+| Interact   | E               |
+| Jump       | Space           |
+| Sprint     | Shift           |
+| Pause/Menu | Esc             |
 
-> You can rebind keys in `settings.json`.
+> Customize controls in the `settings.json` file.
 
 ---
 
-## 📦 How to Play
+## 📦 Installation
 
 ```bash
-# Clone the repo
-git clone https://github.com/yourname/yourgame.git
-cd yourgame
+# Clone the repository
+git clone https://github.com/yourusername/biodrift.git
+cd biodrift
+
+# Install dependencies
+# (Specify any package managers or dependencies here)
 
 # Run the game
-./run.sh  # Or python main.py or your command
+# (Provide the command to start the game, e.g., python main.py)
 🛠 Built With
-Godot or Unity or Pygame – whatever you used
+Unity – Game development engine.
 
-Aseprite – for pixel art
+Blender – 3D modeling and animation.
 
-Audacity – for sound editing
+FMOD – Sound effects and music integration.
 
 ❤️ Contributing
-We love contributors! Check out CONTRIBUTING.md to get started. You can help with:
-
-🧠 Game design
-
-🧑‍💻 Code improvements
-
-🖼 Art or animation
-
-🎧 Music / sound effects
-
-🐞 Bug hunting
+We welcome contributions! Please see CONTRIBUTING.md for details on our code of conduct and the process for submitting pull requests.

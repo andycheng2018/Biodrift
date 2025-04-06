@@ -47,28 +47,5 @@
 | Sprint     | Shift           |
 | Pause/Menu | Esc             |
 
-> Customize controls in the `settings.json` file.
-
 ---
 
-## 📦 Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/biodrift.git
-cd biodrift
-
-# Install dependencies
-# (Specify any package managers or dependencies here)
-
-# Run the game
-# (Provide the command to start the game, e.g., python main.py)
-🛠 Built With
-Unity – Game development engine.
-
-Blender – 3D modeling and animation.
-
-FMOD – Sound effects and music integration.
-
-❤️ Contributing
-We welcome contributions! Please see CONTRIBUTING.md for details on our code of conduct and the process for submitting pull requests.

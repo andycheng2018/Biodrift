@@ -1,2 +1,2 @@
 # Biodrift
-Code for the upcoming game Biodrift
+Code for the experimental game Biodrift

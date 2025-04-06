@@ -20,14 +20,6 @@
   </a>
 </p>
 
----
-
-## 🎥 Preview
-
-[![Watch the demo](https://img.youtube.com/vi/YOUR_YOUTUBE_VIDEO_ID/0.jpg)](https://youtu.be/YOUR_YOUTUBE_VIDEO_ID)
-
----
-
 ## 📸 Screenshots
 
 <p float="left">

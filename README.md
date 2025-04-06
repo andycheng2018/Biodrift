@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/biodrift_banner.png" alt="Biodrift Banner" width="800"/>
+  <img src="biodrift_banner.png" alt="Biodrift Banner" width="800"/>
 </p>
 
 <h1 align="center">🌿 Biodrift-V1.0</h1>
